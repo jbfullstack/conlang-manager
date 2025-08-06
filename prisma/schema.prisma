@@ -1,0 +1,212 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  role         UserRole @default(MEMBER)
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  conceptsCreated     Concept[]
+  combinationsCreated Combination[]
+  votes              CombinationVote[]
+  sessionsCreated    UserSession[]
+  auditLogs          AuditLog[]
+  suggestionsReviewed LLMSuggestion[] @relation("ReviewedBy")
+  statusChanges      CombinationStatusHistory[]
+
+  @@map("users")
+}
+
+model Concept {
+  id              String   @id
+  mot             String   @unique
+  definition      String
+  type            String
+  proprietes      String   // JSON string for compatibility
+  etymologie      String?
+  exemples        String   // JSON string
+  usageFrequency  Float    @default(0.00) @map("usage_frequency")
+  isActive        Boolean  @default(true) @map("is_active")
+  createdBy       String?  @map("created_by")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  version         Int      @default(1)
+
+  // Relations
+  user User? @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+
+  @@map("concepts")
+}
+
+model Combination {
+  id              String            @id @default(cuid())
+  pattern         String            // JSON string of concept IDs
+  sens            String
+  description     String?
+  statut          CombinationStatus @default(PROPOSITION)
+  confidenceScore Float?            @map("confidence_score")
+  source          CombinationSource @default(MANUAL)
+  createdBy       String?           @map("created_by")
+  validatedBy     String?           @map("validated_by")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  validatedAt     DateTime?         @map("validated_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+  version         Int               @default(1)
+
+  // Relations
+  user            User? @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+  votes           CombinationVote[]
+  statusHistory   CombinationStatusHistory[]
+
+  @@map("combinations")
+}
+
+model CombinationVote {
+  id            String   @id @default(cuid())
+  combinationId String   @map("combination_id")
+  userId        String   @map("user_id")
+  vote          VoteType
+  commentaire   String?
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  combination Combination @relation(fields: [combinationId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([combinationId, userId])
+  @@map("combination_votes")
+}
+
+model CombinationStatusHistory {
+  id             String            @id @default(cuid())
+  combinationId  String            @map("combination_id")
+  ancienStatut   CombinationStatus? @map("ancien_statut")
+  nouveauStatut  CombinationStatus  @map("nouveau_statut")
+  changedBy      String?           @map("changed_by")
+  raison         String?
+  createdAt      DateTime          @default(now()) @map("created_at")
+
+  // Relations
+  combination Combination @relation(fields: [combinationId], references: [id], onDelete: Cascade)
+  user        User?       @relation(fields: [changedBy], references: [id], onDelete: SetNull)
+
+  @@map("combination_status_history")
+}
+
+model LLMCache {
+  id              String   @id @default(cuid())
+  cacheKey        String   @unique @map("cache_key")
+  queryType       String   @map("query_type")
+  inputData       String   @map("input_data") // JSON string
+  result          String   // JSON string
+  confidenceScore Float?   @map("confidence_score")
+  modelUsed       String   @default("gpt-4o-mini") @map("model_used")
+  tokensUsed      Int?     @map("tokens_used")
+  createdAt       DateTime @default(now()) @map("created_at")
+  expiresAt       DateTime @map("expires_at")
+
+  @@map("llm_cache")
+}
+
+model LLMSuggestion {
+  id              String             @id @default(cuid())
+  type            String
+  suggestion      String             // JSON string
+  context         String?            // JSON string  
+  confidenceScore Float?             @map("confidence_score")
+  statut          SuggestionStatus   @default(PENDING)
+  createdAt       DateTime           @default(now()) @map("created_at")
+  reviewedBy      String?            @map("reviewed_by")
+  reviewedAt      DateTime?          @map("reviewed_at")
+
+  // Relations
+  reviewer User? @relation("ReviewedBy", fields: [reviewedBy], references: [id], onDelete: SetNull)
+
+  @@map("llm_suggestions")
+}
+
+model AuditLog {
+  id         String      @id @default(cuid())
+  tableName  String      @map("table_name")
+  recordId   String      @map("record_id")
+  operation  Operation
+  oldData    String?     @map("old_data") // JSON string
+  newData    String?     @map("new_data") // JSON string
+  changedBy  String?     @map("changed_by")
+  createdAt  DateTime    @default(now()) @map("created_at")
+  ipAddress  String?     @map("ip_address")
+  userAgent  String?     @map("user_agent")
+
+  // Relations
+  user User? @relation(fields: [changedBy], references: [id], onDelete: SetNull)
+
+  @@map("audit_logs")
+}
+
+model UserSession {
+  id           String   @id @default(cuid())
+  userId       String   @map("user_id")
+  sessionToken String   @unique @map("session_token")
+  expiresAt    DateTime @map("expires_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+  lastAccessed DateTime @default(now()) @map("last_accessed")
+  ipAddress    String?  @map("ip_address")
+  userAgent    String?  @map("user_agent")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_sessions")
+}
+
+enum UserRole {
+  ADMIN
+  MODERATOR
+  MEMBER
+}
+
+enum CombinationStatus {
+  PROPOSITION
+  EN_COURS
+  ADOPTE
+  REFUSE
+  DESUET
+}
+
+enum CombinationSource {
+  MANUAL
+  LLM_SUGGESTED
+  ALGORITHMIC
+}
+
+enum VoteType {
+  POUR
+  CONTRE
+  ABSTENTION
+}
+
+enum SuggestionStatus {
+  PENDING
+  REVIEWED
+  IMPLEMENTED
+  REJECTED
+}
+
+enum Operation {
+  INSERT
+  UPDATE
+  DELETE
+}
