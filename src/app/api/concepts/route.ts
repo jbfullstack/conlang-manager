@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
     });
 
     return NextResponse.json({ 
-      concepts: concepts.map(c => ({
+      concepts: concepts.map((c: { proprietes: string; exemples: string; }) => ({
         ...c,
         proprietes: c.proprietes ? JSON.parse(c.proprietes) : [],
         exemples: c.exemples ? JSON.parse(c.exemples) : []

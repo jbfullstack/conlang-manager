@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
       take: limit
     });
 
-    const formattedCombinations = combinations.map(c => ({
+    const formattedCombinations = combinations.map((c: { pattern: string; _count: { votes: any; }; votes: { filter: (arg0: { (v: any): boolean; (v: any): boolean; (v: any): boolean; }) => { (): any; new(): any; length: any; }; }; }) => ({
       ...c,
       pattern: JSON.parse(c.pattern),
       voteStats: {

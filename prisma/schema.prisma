@@ -34,7 +34,7 @@ model Concept {
   mot             String   @unique
   definition      String
   type            String
-  proprietes      String   // JSON string for compatibility
+  conceptProperties ConceptProperty[]
   etymologie      String?
   exemples        String   // JSON string
   usageFrequency  Float    @default(0.00) @map("usage_frequency")
@@ -48,6 +48,36 @@ model Concept {
   user User? @relation(fields: [createdBy], references: [id], onDelete: SetNull)
 
   @@map("concepts")
+}
+
+model Property {
+  id          String   @id @default(cuid())
+  name        String   @unique // Ex: "liquide", "rapide", "lumineux"
+  description String?  // Description optionnelle
+  category    String?  // Ex: "physique", "abstrait", "sensoriel"
+  usageCount  Int      @default(0) // Combien de concepts l'utilisent
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  
+  // Relations
+  conceptProperties ConceptProperty[]
+  
+  @@map("properties")
+}
+
+// Table de liaison Many-to-Many
+model ConceptProperty {
+  id        String   @id @default(cuid())
+  conceptId String   @map("concept_id")
+  propertyId String  @map("property_id")
+  createdAt DateTime @default(now())
+  
+  // Relations
+  concept  Concept  @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  
+  @@unique([conceptId, propertyId])
+  @@map("concept_properties")
 }
 
 model Combination {
