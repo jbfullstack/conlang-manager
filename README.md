@@ -7,11 +7,11 @@ npm install
 
 # Start the app
 
-./scripts/start.sh
-npm run dev
+<pre> ```bash ./scripts/start.sh npm run dev ``` </pre>
 
 # Stop the app
 
-./scripts/stop.sh
+<pre> ```bash ./scripts/stop.sh npm run dev ``` </pre>
+
 
 
