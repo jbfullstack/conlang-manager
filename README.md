@@ -5,13 +5,18 @@ Personnal language manager
 
 npm install
 
-# Start the app
+### Start the app
 
-<pre> ```bash ./scripts/start.sh npm run dev ``` </pre>
+```bash
+./scripts/start.sh
+npm run dev
+```
 
-# Stop the app
+### Stop the app
 
-<pre> ```bash ./scripts/stop.sh npm run dev ``` </pre>
+```bash
+./scripts/stop.sh
+```
 
 
 
