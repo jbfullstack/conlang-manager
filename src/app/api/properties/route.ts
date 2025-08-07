@@ -6,32 +6,99 @@ const prisma = new PrismaClient();
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
+    
+    // Paramètres de recherche et filtrage
     const search = searchParams.get('search');
     const category = searchParams.get('category');
-    const limit = parseInt(searchParams.get('limit') || '100');
+    const status = searchParams.get('status'); // active/inactive/all
     const includeConcepts = searchParams.get('include') === 'concepts';
-    const activeOnly = searchParams.get('active') !== 'false'; // Par défaut true pour compatibilité
+    
+    // Paramètres de pagination
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1'));
+    const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get('pageSize') || '12')));
+    
+    // Mode de compatibilité pour l'autocomplétion existante
+    const activeOnly = searchParams.get('active') !== 'false';
+    const limit = parseInt(searchParams.get('limit') || '0');
+    
+    // Mode legacy (autocomplétion) - comportement existant
+    if (limit > 0) {
+      let where: any = {};
+      
+      if (activeOnly) {
+        where.isActive = true;
+      }
 
-    let where: any = {};
+      if (search) {
+        where.OR = [
+          { name: { contains: search, mode: 'insensitive' } },
+          { description: { contains: search, mode: 'insensitive' } }
+        ];
+      }
 
-    // Pour l'autocomplétion (comportement existant), on filtre par isActive
-    // Pour la page de gestion, on peut récupérer toutes les propriétés
-    if (activeOnly) {
-      where.isActive = true;
+      if (category && category !== 'all') {
+        where.category = category;
+      }
+
+      const properties = await prisma.property.findMany({
+        where,
+        orderBy: [
+          { usageCount: 'desc' },
+          { name: 'asc' }
+        ],
+        take: limit
+      });
+
+      const categories = await prisma.property.findMany({
+        where: { isActive: true },
+        select: { category: true },
+        distinct: ['category']
+      });
+
+      const uniqueCategories = categories
+        .map(p => p.category)
+        .filter(Boolean)
+        .sort();
+
+      return NextResponse.json({ 
+        properties,
+        categories: uniqueCategories
+      });
     }
 
+    // Nouveau mode paginé avec filtrage global
+    let where: any = {};
+
+    // Filtrage par statut
+    if (status === 'active') {
+      where.isActive = true;
+    } else if (status === 'inactive') {
+      where.isActive = false;
+    }
+    // Si status === 'all' ou null, pas de filtre sur isActive
+
+    // Filtrage par recherche textuelle
     if (search) {
       where.OR = [
         { name: { contains: search, mode: 'insensitive' } },
-        { description: { contains: search, mode: 'insensitive' } }
+        { description: { contains: search, mode: 'insensitive' } },
+        { category: { contains: search, mode: 'insensitive' } }
       ];
     }
 
+    // Filtrage par catégorie
     if (category && category !== 'all') {
       where.category = category;
     }
 
-    // Récupérer les propriétés avec ou sans les concepts associés
+    // Compte total (pour la pagination)
+    const totalCount = await prisma.property.count({ where });
+
+    // Calcul de la pagination
+    const totalPages = Math.ceil(totalCount / pageSize);
+    const skip = (page - 1) * pageSize;
+
+    // Récupération des propriétés avec pagination
     const properties = await prisma.property.findMany({
       where,
       orderBy: [
@@ -39,7 +106,8 @@ export async function GET(request: NextRequest) {
         { usageCount: 'desc' }, // Puis par usage
         { name: 'asc' } // Puis par nom alphabétique
       ],
-      take: limit,
+      skip,
+      take: pageSize,
       include: includeConcepts ? {
         conceptProperties: {
           include: {
@@ -56,24 +124,24 @@ export async function GET(request: NextRequest) {
       } : undefined
     });
 
-    // Récupérer les catégories uniques (toutes, pas seulement actives pour la gestion)
-    const categoryWhere = activeOnly ? { isActive: true } : {};
-    const categories = await prisma.property.findMany({
-      where: categoryWhere,
-      select: { category: true },
-      distinct: ['category']
-    });
-
-    const uniqueCategories = categories
-      .map(p => p.category)
-      .filter(Boolean)
-      .sort();
+    // Informations de pagination
+    const pagination = {
+      page,
+      pageSize,
+      totalCount,
+      totalPages,
+      hasNext: page < totalPages,
+      hasPrev: page > 1,
+      startItem: totalCount > 0 ? skip + 1 : 0,
+      endItem: Math.min(skip + pageSize, totalCount)
+    };
 
     return NextResponse.json({ 
       properties,
-      categories: uniqueCategories,
-      total: properties.length
+      pagination,
+      totalCount, // Pour compatibilité
     });
+    
   } catch (error) {
     console.error('Erreur GET properties:', error);
     return NextResponse.json(

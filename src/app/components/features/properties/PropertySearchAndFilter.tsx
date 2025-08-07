@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { getCategoryLabel, getCategoriesByGroup } from '../../../lib/categories';
 
 interface PropertySearchAndFilterProps {
@@ -6,6 +6,7 @@ interface PropertySearchAndFilterProps {
   categories: string[];
   totalCount: number;
   filteredCount: number;
+  loading?: boolean;
 }
 
 export default function PropertySearchAndFilter({
@@ -13,22 +14,69 @@ export default function PropertySearchAndFilter({
   categories,
   totalCount,
   filteredCount,
+  loading = false,
 }: PropertySearchAndFilterProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [activeFilter, setActiveFilter] = useState('all');
   const [showGroupedCategories, setShowGroupedCategories] = useState(false);
 
-  // Déclencher la recherche à chaque changement
-  useEffect(() => {
-    onSearch(searchTerm, categoryFilter, activeFilter);
-  }, [searchTerm, categoryFilter, activeFilter, onSearch]);
+  // Fonction de recherche avec debounce
+  const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null);
 
-  const handleReset = () => {
+  const handleSearchWithDebounce = useCallback(
+    (term: string, catFilter: string, actFilter: string) => {
+      if (searchTimeout) {
+        clearTimeout(searchTimeout);
+      }
+
+      const timeout = setTimeout(() => {
+        onSearch(term, catFilter, actFilter);
+      }, 300); // 300ms de debounce
+
+      setSearchTimeout(timeout);
+    },
+    [onSearch, searchTimeout],
+  );
+
+  const handleSearchTermChange = useCallback(
+    (value: string) => {
+      setSearchTerm(value);
+      handleSearchWithDebounce(value, categoryFilter, activeFilter);
+    },
+    [categoryFilter, activeFilter, handleSearchWithDebounce],
+  );
+
+  const handleCategoryFilterChange = useCallback(
+    (value: string) => {
+      setCategoryFilter(value);
+      onSearch(searchTerm, value, activeFilter); // Pas de debounce pour les dropdowns
+    },
+    [searchTerm, activeFilter, onSearch],
+  );
+
+  const handleActiveFilterChange = useCallback(
+    (value: string) => {
+      setActiveFilter(value);
+      onSearch(searchTerm, categoryFilter, value); // Pas de debounce pour les dropdowns
+    },
+    [searchTerm, categoryFilter, onSearch],
+  );
+
+  const handleReset = useCallback(() => {
     setSearchTerm('');
     setCategoryFilter('all');
     setActiveFilter('all');
-  };
+    onSearch('', 'all', 'all');
+  }, [onSearch]);
+
+  const handleQuickCategoryFilter = useCallback(
+    (category: string) => {
+      setCategoryFilter(category);
+      onSearch(searchTerm, category, activeFilter);
+    },
+    [searchTerm, activeFilter, onSearch],
+  );
 
   const hasFilters = searchTerm || categoryFilter !== 'all' || activeFilter !== 'all';
 
@@ -59,11 +107,16 @@ export default function PropertySearchAndFilter({
               type="text"
               placeholder="Rechercher par nom, description ou catégorie..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              onChange={(e) => handleSearchTermChange(e.target.value)}
+              disabled={loading}
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
             />
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <span className="text-gray-400">🔍</span>
+              {loading ? (
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+              ) : (
+                <span className="text-gray-400">🔍</span>
+              )}
             </div>
           </div>
         </div>
@@ -74,8 +127,9 @@ export default function PropertySearchAndFilter({
           <div className="min-w-[180px]">
             <select
               value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              onChange={(e) => handleCategoryFilterChange(e.target.value)}
+              disabled={loading}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
             >
               <option value="all">Toutes catégories</option>
 
@@ -127,8 +181,9 @@ export default function PropertySearchAndFilter({
           <div className="min-w-[120px]">
             <select
               value={activeFilter}
-              onChange={(e) => setActiveFilter(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              onChange={(e) => handleActiveFilterChange(e.target.value)}
+              disabled={loading}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
             >
               <option value="all">Tous statuts</option>
               <option value="active">Actives</option>
@@ -140,7 +195,8 @@ export default function PropertySearchAndFilter({
           {hasFilters && (
             <button
               onClick={handleReset}
-              className="px-4 py-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors flex items-center space-x-1"
+              disabled={loading}
+              className="px-4 py-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors flex items-center space-x-1 disabled:opacity-50 disabled:cursor-not-allowed"
               title="Réinitialiser les filtres"
             >
               <span>↻</span>
@@ -153,16 +209,10 @@ export default function PropertySearchAndFilter({
       {/* Résumé et statistiques */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between text-sm text-gray-600">
         <div>
-          {filteredCount === totalCount ? (
-            <span>
-              {totalCount} propriété{totalCount !== 1 ? 's' : ''} au total
-            </span>
-          ) : (
-            <span>
-              {filteredCount} propriété{filteredCount !== 1 ? 's' : ''} affichée
-              {filteredCount !== 1 ? 's' : ''} sur {totalCount}
-            </span>
-          )}
+          <span>
+            {totalCount} propriété{totalCount !== 1 ? 's' : ''} au total
+            {hasFilters && <span className="ml-2 text-blue-600">(recherche active)</span>}
+          </span>
         </div>
 
         {hasFilters && (
@@ -180,16 +230,16 @@ export default function PropertySearchAndFilter({
         )}
       </div>
 
-      {/* Statistiques rapides par groupe de catégories */}
-      {categories.length > 0 && !hasFilters && (
+      {/* Statistiques rapides par groupe de catégories - seulement quand pas de filtres actifs */}
+      {categories.length > 0 && !hasFilters && !loading && (
         <div className="mt-4 pt-4 border-t border-gray-100">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-xs text-gray-500">Répartition par catégorie:</p>
+            <p className="text-xs text-gray-500">Filtres rapides par catégorie:</p>
             <button
               onClick={() => setShowGroupedCategories(!showGroupedCategories)}
               className="text-xs text-blue-600 hover:text-blue-800 transition-colors"
             >
-              {showGroupedCategories ? 'Masquer' : 'Voir groupes'}
+              {showGroupedCategories ? 'Vue simple' : 'Vue groupée'}
             </button>
           </div>
 
@@ -215,7 +265,7 @@ export default function PropertySearchAndFilter({
                       {groupCategories.map((cat) => (
                         <button
                           key={cat.key}
-                          onClick={() => setCategoryFilter(cat.key)}
+                          onClick={() => handleQuickCategoryFilter(cat.key)}
                           className="px-2 py-1 text-xs bg-gray-100 hover:bg-blue-100 text-gray-700 hover:text-blue-700 rounded transition-colors"
                           title={cat.description}
                         >
@@ -235,7 +285,7 @@ export default function PropertySearchAndFilter({
                     {otherCategories.map((category) => (
                       <button
                         key={category}
-                        onClick={() => setCategoryFilter(category)}
+                        onClick={() => handleQuickCategoryFilter(category)}
                         className="px-2 py-1 text-xs bg-gray-100 hover:bg-blue-100 text-gray-700 hover:text-blue-700 rounded transition-colors"
                       >
                         {getCategoryLabel(category)}
@@ -248,15 +298,20 @@ export default function PropertySearchAndFilter({
           ) : (
             // Affichage simple
             <div className="flex flex-wrap gap-2">
-              {categories.map((category) => (
+              {categories.slice(0, 8).map((category) => (
                 <button
                   key={category}
-                  onClick={() => setCategoryFilter(category)}
+                  onClick={() => handleQuickCategoryFilter(category)}
                   className="px-2 py-1 text-xs bg-gray-100 hover:bg-blue-100 text-gray-700 hover:text-blue-700 rounded transition-colors"
                 >
                   {getCategoryLabel(category)}
                 </button>
               ))}
+              {categories.length > 8 && (
+                <span className="px-2 py-1 text-xs text-gray-500">
+                  +{categories.length - 8} autres...
+                </span>
+              )}
             </div>
           )}
         </div>

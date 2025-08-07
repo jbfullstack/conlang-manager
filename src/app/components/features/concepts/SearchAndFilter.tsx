@@ -1,94 +1,172 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 
 interface SearchAndFilterProps {
   onSearch: (searchTerm: string, typeFilter: string) => void;
   types: string[];
   totalCount: number;
   filteredCount: number;
+  loading?: boolean;
 }
 
-export default function SearchAndFilter({ onSearch, types, totalCount, filteredCount }: SearchAndFilterProps) {
+export default function SearchAndFilter({
+  onSearch,
+  types,
+  totalCount,
+  filteredCount,
+  loading = false,
+}: SearchAndFilterProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
 
-  const handleSearchChange = (value: string) => {
-    setSearchTerm(value);
-    onSearch(value, typeFilter);
-  };
+  // Fonction de recherche avec debounce
+  const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null);
 
-  const handleTypeChange = (value: string) => {
-    setTypeFilter(value);
-    onSearch(searchTerm, value);
-  };
+  const handleSearchWithDebounce = useCallback(
+    (term: string, tFilter: string) => {
+      if (searchTimeout) {
+        clearTimeout(searchTimeout);
+      }
 
-  const clearFilters = () => {
+      const timeout = setTimeout(() => {
+        onSearch(term, tFilter);
+      }, 300); // 300ms de debounce
+
+      setSearchTimeout(timeout);
+    },
+    [onSearch, searchTimeout],
+  );
+
+  const handleSearchTermChange = useCallback(
+    (value: string) => {
+      setSearchTerm(value);
+      handleSearchWithDebounce(value, typeFilter);
+    },
+    [typeFilter, handleSearchWithDebounce],
+  );
+
+  const handleTypeFilterChange = useCallback(
+    (value: string) => {
+      setTypeFilter(value);
+      onSearch(searchTerm, value); // Pas de debounce pour les dropdowns
+    },
+    [searchTerm, onSearch],
+  );
+
+  const handleReset = useCallback(() => {
     setSearchTerm('');
     setTypeFilter('all');
     onSearch('', 'all');
-  };
+  }, [onSearch]);
+
+  const handleQuickTypeFilter = useCallback(
+    (type: string) => {
+      setTypeFilter(type);
+      onSearch(searchTerm, type);
+    },
+    [searchTerm, onSearch],
+  );
+
+  const hasFilters = searchTerm || typeFilter !== 'all';
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 mb-8">
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0 lg:space-x-4">
-        {/* Search Input */}
-        <div className="flex-1 max-w-md">
-          <label htmlFor="search" className="block text-sm font-medium text-gray-700 mb-2">
-            Rechercher
-          </label>
+    <div className="mb-6 bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+      {/* Barre de recherche */}
+      <div className="flex flex-col lg:flex-row lg:items-center space-y-4 lg:space-y-0 lg:space-x-4 mb-4">
+        <div className="flex-1">
           <div className="relative">
             <input
               type="text"
-              id="search"
+              placeholder="Rechercher par mot, définition, type ou propriété..."
               value={searchTerm}
-              onChange={(e) => handleSearchChange(e.target.value)}
-              placeholder="Mot, définition, propriétés..."
-              className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              onChange={(e) => handleSearchTermChange(e.target.value)}
+              disabled={loading}
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
             />
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <span className="text-gray-400">🔍</span>
+              {loading ? (
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+              ) : (
+                <span className="text-gray-400">🔍</span>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Type Filter */}
-        <div className="flex-shrink-0">
-          <label htmlFor="type-filter" className="block text-sm font-medium text-gray-700 mb-2">
-            Filtrer par type
-          </label>
-          <select
-            id="type-filter"
-            value={typeFilter}
-            onChange={(e) => handleTypeChange(e.target.value)}
-            className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          >
-            <option value="all">Tous les types ({totalCount})</option>
-            {types.map(type => (
-              <option key={type} value={type}>{type}</option>
-            ))}
-          </select>
-        </div>
-
-        {/* Actions */}
-        <div className="flex-shrink-0 flex items-end space-x-2">
-          {(searchTerm || typeFilter !== 'all') && (
-            <button
-              onClick={clearFilters}
-              className="px-4 py-2 text-gray-600 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
+        {/* Filtres */}
+        <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4">
+          {/* Filtre par type */}
+          <div className="min-w-[160px]">
+            <select
+              value={typeFilter}
+              onChange={(e) => handleTypeFilterChange(e.target.value)}
+              disabled={loading}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
             >
-              Effacer
+              <option value="all">Tous les types</option>
+              {types.map((type) => (
+                <option key={type} value={type}>
+                  {type.charAt(0).toUpperCase() + type.slice(1)}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Bouton reset */}
+          {hasFilters && (
+            <button
+              onClick={handleReset}
+              disabled={loading}
+              className="px-4 py-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors flex items-center space-x-1 disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Réinitialiser les filtres"
+            >
+              <span>↻</span>
+              <span>Reset</span>
             </button>
           )}
-          <div className="text-sm text-gray-500 flex items-center">
-            {filteredCount !== totalCount ? (
-              <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                {filteredCount} sur {totalCount}
+        </div>
+      </div>
+
+      {/* Résumé et statistiques */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between text-sm text-gray-600">
+        <div>
+          <span>
+            {totalCount} concept{totalCount !== 1 ? 's' : ''} au total
+            {hasFilters && <span className="ml-2 text-blue-600">(recherche active)</span>}
+          </span>
+        </div>
+
+        {hasFilters && (
+          <div className="mt-2 sm:mt-0 flex items-center space-x-4">
+            {searchTerm && <span className="text-blue-600">🔍 "{searchTerm}"</span>}
+            {typeFilter !== 'all' && (
+              <span className="text-green-600">
+                📂 {typeFilter.charAt(0).toUpperCase() + typeFilter.slice(1)}
               </span>
-            ) : (
-              <span>{totalCount} concept{totalCount !== 1 ? 's' : ''}</span>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Filtres rapides par type - seulement quand pas de filtres actifs */}
+      {types.length > 0 && !hasFilters && !loading && (
+        <div className="mt-4 pt-4 border-t border-gray-100">
+          <p className="text-xs text-gray-500 mb-2">Filtres rapides par type:</p>
+          <div className="flex flex-wrap gap-2">
+            {types.slice(0, 8).map((type) => (
+              <button
+                key={type}
+                onClick={() => handleQuickTypeFilter(type)}
+                className="px-2 py-1 text-xs bg-gray-100 hover:bg-blue-100 text-gray-700 hover:text-blue-700 rounded transition-colors"
+              >
+                {type.charAt(0).toUpperCase() + type.slice(1)}
+              </button>
+            ))}
+            {types.length > 8 && (
+              <span className="px-2 py-1 text-xs text-gray-500">+{types.length - 8} autres...</span>
             )}
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
