@@ -1,19 +1,16 @@
-import type { Metadata } from 'next'
-import { Inter } from 'next/font/google'
-import './globals.css'
+import type { Metadata } from 'next';
+import { Inter } from 'next/font/google';
+import './globals.css';
+import Link from 'next/link';
 
-const inter = Inter({ subsets: ['latin'] })
+const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
   title: 'Conlang Manager',
   description: 'Gestionnaire collaboratif de langue construite',
-}
+};
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="fr">
       <body className={inter.className}>
@@ -22,9 +19,7 @@ export default function RootLayout({
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
               <div className="flex justify-between h-16">
                 <div className="flex items-center">
-                  <h1 className="text-xl font-bold text-gray-900">
-                    Conlang Manager
-                  </h1>
+                  <h1 className="text-xl font-bold text-gray-900">Conlang Manager</h1>
                 </div>
                 <div className="flex items-center space-x-4">
                   <a href="/concepts" className="text-gray-600 hover:text-gray-900">
@@ -36,6 +31,10 @@ export default function RootLayout({
                   <a href="/dashboard" className="text-gray-600 hover:text-gray-900">
                     Dashboard
                   </a>
+
+                  <Link href="/properties" className="nav-link">
+                    🏷️ Propriétés
+                  </Link>
                 </div>
               </div>
             </div>
@@ -44,5 +43,5 @@ export default function RootLayout({
         </div>
       </body>
     </html>
-  )
+  );
 }
