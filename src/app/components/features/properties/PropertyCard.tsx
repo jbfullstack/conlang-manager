@@ -16,25 +16,13 @@
 // }
 
 import { Property } from '@/app/interfaces/property.interface';
+import { getCategoryColor } from '@/app/lib/categories';
 
 interface PropertyCardProps {
   property: Property;
   onEdit: () => void;
   onDelete: () => void;
 }
-
-const getCategoryColor = (category: string) => {
-  const colors: { [key: string]: string } = {
-    grammatical: 'bg-blue-100 text-blue-800',
-    semantic: 'bg-green-100 text-green-800',
-    phonetic: 'bg-purple-100 text-purple-800',
-    morphological: 'bg-orange-100 text-orange-800',
-    syntactic: 'bg-red-100 text-red-800',
-    lexical: 'bg-yellow-100 text-yellow-800',
-    default: 'bg-gray-100 text-gray-800',
-  };
-  return colors[category.toLowerCase()] || colors.default;
-};
 
 const formatDate = (dateString: string) => {
   return new Date(dateString).toLocaleDateString('fr-FR', {

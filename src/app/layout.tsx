@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
-import Link from 'next/link';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -31,10 +30,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   <a href="/dashboard" className="text-gray-600 hover:text-gray-900">
                     Dashboard
                   </a>
-
-                  <Link href="/properties" className="nav-link">
-                    🏷️ Propriétés
-                  </Link>
+                  <a href="/properties" className="text-gray-600 hover:text-gray-900">
+                    Propriétés
+                  </a>
                 </div>
               </div>
             </div>

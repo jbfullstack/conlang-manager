@@ -2,6 +2,7 @@
 // prisma/seed.ts - Script de seed mis à jour
 // ============================================
 
+import { CATEGORY_KEYS } from '@/app/lib/categories';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
@@ -63,131 +64,183 @@ async function main() {
 
   // Créer les propriétés de base
   const properties = await Promise.all([
-    // Propriétés physiques
-    prisma.property.create({
-      data: {
-        name: 'liquide',
-        description: 'État liquide de la matière',
-        category: 'physique',
-      },
-    }),
-    prisma.property.create({
-      data: {
-        name: 'fluide',
-        description: 'Qui coule facilement',
-        category: 'physique',
-      },
-    }),
-    prisma.property.create({
-      data: {
-        name: 'vital',
-        description: 'Essentiel à la vie',
-        category: 'abstrait',
-      },
-    }),
-    prisma.property.create({
-      data: {
-        name: 'transparent',
-        description: 'Laisse passer la lumière',
-        category: 'visuel',
-      },
-    }),
-    // Propriétés de mouvement
-    prisma.property.create({
-      data: {
-        name: 'vitesse',
-        description: 'Rapide, véloce',
-        category: 'mouvement',
-      },
-    }),
-    prisma.property.create({
-      data: {
-        name: 'dynamique',
-        description: 'En mouvement, actif',
-        category: 'mouvement',
-      },
-    }),
-    prisma.property.create({
-      data: {
-        name: 'energie',
-        description: 'Plein d\'énergie, puissant',
-        category: 'abstrait',
-      },
-    }),
-    // Propriétés lumineuses
-    prisma.property.create({
-      data: {
-        name: 'lumiere',
-        description: 'Émetteur ou porteur de lumière',
-        category: 'visuel',
-      },
-    }),
-    prisma.property.create({
-      data: {
-        name: 'chaleur',
-        description: 'Chaud, réchauffant',
-        category: 'sensoriel',
-      },
-    }),
-    prisma.property.create({
-      data: {
-        name: 'vie',
-        description: 'Porteur de vie, vivifiant',
-        category: 'abstrait',
-      },
-    }),
-    // Propriétés d'obscurité
-    prisma.property.create({
-      data: {
-        name: 'obscurite',
-        description: 'Sombre, sans lumière',
-        category: 'visuel',
-      },
-    }),
-    prisma.property.create({
-      data: {
-        name: 'repos',
-        description: 'Calme, reposant',
-        category: 'abstrait',
-      },
-    }),
-    prisma.property.create({
-      data: {
-        name: 'mystere',
-        description: 'Mystérieux, caché',
-        category: 'abstrait',
-      },
-    }),
-    prisma.property.create({
-      data: {
-        name: 'calme',
-        description: 'Paisible, tranquille',
-        category: 'emotion',
-      },
-    }),
-    // Propriétés esthétiques
-    prisma.property.create({
-      data: {
-        name: 'esthetique',
-        description: 'Beau, agréable à regarder',
-        category: 'visuel',
-      },
-    }),
-    prisma.property.create({
-      data: {
-        name: 'harmonie',
-        description: 'Équilibré, harmonieux',
-        category: 'abstrait',
-      },
-    }),
-    prisma.property.create({
-      data: {
-        name: 'equilibre',
-        description: 'En équilibre, stable',
-        category: 'abstrait',
-      },
-    }),
-  ]);
+  // Propriétés physiques
+  prisma.property.create({
+    data: {
+      name: 'liquide',
+      description: 'État liquide de la matière, qui coule facilement',
+      category: CATEGORY_KEYS.PHYSIQUE,
+    },
+  }),
+  prisma.property.create({
+    data: {
+      name: 'fluide',
+      description: 'Qui coule facilement, se déplace avec fluidité',
+      category: CATEGORY_KEYS.PHYSIQUE,
+    },
+  }),
+  prisma.property.create({
+    data: {
+      name: 'transparent',
+      description: 'Laisse passer la lumière, permet de voir au travers',
+      category: CATEGORY_KEYS.VISUEL,
+    },
+  }),
+
+  // Propriétés abstraites
+  prisma.property.create({
+    data: {
+      name: 'vital',
+      description: 'Essentiel à la vie, indispensable à l\'existence',
+      category: CATEGORY_KEYS.ABSTRAIT,
+    },
+  }),
+  prisma.property.create({
+    data: {
+      name: 'energie',
+      description: 'Plein d\'énergie, puissant, dynamique',
+      category: CATEGORY_KEYS.ABSTRAIT,
+    },
+  }),
+  prisma.property.create({
+    data: {
+      name: 'repos',
+      description: 'Calme, reposant, tranquille',
+      category: CATEGORY_KEYS.ABSTRAIT,
+    },
+  }),
+  prisma.property.create({
+    data: {
+      name: 'mystere',
+      description: 'Mystérieux, caché, énigmatique',
+      category: CATEGORY_KEYS.ABSTRAIT,
+    },
+  }),
+  prisma.property.create({
+    data: {
+      name: 'harmonie',
+      description: 'Équilibré, harmonieux, en accord',
+      category: CATEGORY_KEYS.ABSTRAIT,
+    },
+  }),
+  prisma.property.create({
+    data: {
+      name: 'equilibre',
+      description: 'En équilibre, stable, équilibré',
+      category: CATEGORY_KEYS.ABSTRAIT,
+    },
+  }),
+  prisma.property.create({
+    data: {
+      name: 'vie',
+      description: 'Porteur de vie, vivifiant, qui donne la vie',
+      category: CATEGORY_KEYS.ABSTRAIT,
+    },
+  }),
+
+  // Propriétés de mouvement
+  prisma.property.create({
+    data: {
+      name: 'vitesse',
+      description: 'Rapide, véloce, qui se déplace rapidement',
+      category: CATEGORY_KEYS.MOUVEMENT,
+    },
+  }),
+  prisma.property.create({
+    data: {
+      name: 'dynamique',
+      description: 'En mouvement, actif, plein de dynamisme',
+      category: CATEGORY_KEYS.MOUVEMENT,
+    },
+  }),
+
+  // Propriétés visuelles/lumineuses
+  prisma.property.create({
+    data: {
+      name: 'lumiere',
+      description: 'Émetteur ou porteur de lumière, lumineux',
+      category: CATEGORY_KEYS.VISUEL,
+    },
+  }),
+  prisma.property.create({
+    data: {
+      name: 'obscurite',
+      description: 'Sombre, sans lumière, dans l\'obscurité',
+      category: CATEGORY_KEYS.VISUEL,
+    },
+  }),
+  prisma.property.create({
+    data: {
+      name: 'esthetique',
+      description: 'Beau, agréable à regarder, esthétiquement plaisant',
+      category: CATEGORY_KEYS.VISUEL,
+    },
+  }),
+
+  // Propriétés sensorielles
+  prisma.property.create({
+    data: {
+      name: 'chaleur',
+      description: 'Chaud, réchauffant, qui dégage de la chaleur',
+      category: CATEGORY_KEYS.SENSORIEL,
+    },
+  }),
+
+  // Propriétés émotionnelles
+  prisma.property.create({
+    data: {
+      name: 'calme',
+      description: 'Paisible, tranquille, qui apporte le calme',
+      category: CATEGORY_KEYS.EMOTION,
+    },
+  }),
+
+  // Nouvelles propriétés pour enrichir le système
+  prisma.property.create({
+    data: {
+      name: 'temporel',
+      description: 'Lié au temps, qui s\'étend dans la durée',
+      category: CATEGORY_KEYS.TEMPORAL,
+    },
+  }),
+  prisma.property.create({
+    data: {
+      name: 'spatial',
+      description: 'Lié à l\'espace, qui occupe un volume',
+      category: CATEGORY_KEYS.SPATIAL,
+    },
+  }),
+  prisma.property.create({
+    data: {
+      name: 'social',
+      description: 'Relatif aux relations sociales, communautaire',
+      category: CATEGORY_KEYS.SOCIAL,
+    },
+  }),
+  prisma.property.create({
+    data: {
+      name: 'cognitif',
+      description: 'Relatif aux processus mentaux et à la cognition',
+      category: CATEGORY_KEYS.COGNITIF,
+    },
+  }),
+
+  // Propriétés linguistiques (si vous en avez besoin)
+  prisma.property.create({
+    data: {
+      name: 'grammatical',
+      description: 'Propriété grammaticale, règle de grammaire',
+      category: CATEGORY_KEYS.GRAMMATICAL,
+    },
+  }),
+  prisma.property.create({
+    data: {
+      name: 'semantique',
+      description: 'Relatif au sens, à la signification',
+      category: CATEGORY_KEYS.SEMANTIC,
+    },
+  }),
+]);
 
   console.log('🏷️  Propriétés créées:', properties.length);
 
