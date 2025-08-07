@@ -1,4 +1,4 @@
-import { Property } from '@/app/interfaces/property.interface';
+import { Property } from '@/interfaces/property.interface';
 import { useState, useEffect } from 'react';
 
 // interface Property {

@@ -1,5 +1,5 @@
-import { Concept } from '@/app/interfaces/concept.interface';
-import { Property } from '@/app/interfaces/property.interface';
+import { Concept } from '@/interfaces/concept.interface';
+import { Property } from '@/interfaces/property.interface';
 import { useState, useEffect, useRef } from 'react';
 
 interface ConceptFormProps {

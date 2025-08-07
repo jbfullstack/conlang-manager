@@ -1,27 +1,12 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import PropertyCard from '../components/features/properties/PropertyCard';
 import PropertyForm from '../components/features/properties/PropertyForm';
 import PropertySearchAndFilter from '../components/features/properties/PropertySearchAndFilter';
 import Pagination from '../components/ui/Pagination';
-
-interface Property {
-  id: string;
-  name: string;
-  description: string;
-  category: string;
-  usageCount: number;
-  isActive: boolean;
-  conceptProperties?: {
-    concept: {
-      id: string;
-      mot: string;
-      type: string;
-    };
-  }[];
-  createdAt: string;
-}
+import { Property } from '@/interfaces/property.interface';
+import { usePagination } from '@/hooks/usePagination';
 
 interface PaginationInfo {
   page: number;
@@ -39,13 +24,21 @@ export default function PropertiesPage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingProperty, setEditingProperty] = useState<Property | null>(null);
 
-  // Pagination et filtres - état centralisé
+  // ✅ Utiliser le hook usePagination corrigé
+  const pagination = usePagination({
+    defaultPageSize: 12,
+    defaultPage: 1,
+  });
+
+  // Filtres de recherche
   const [searchFilters, setSearchFilters] = useState({
     searchTerm: '',
     categoryFilter: 'all',
     activeFilter: 'all',
   });
-  const [pagination, setPagination] = useState<PaginationInfo>({
+
+  // Info de pagination du serveur
+  const [serverPagination, setServerPagination] = useState<PaginationInfo>({
     page: 1,
     pageSize: 12,
     totalCount: 0,
@@ -54,72 +47,63 @@ export default function PropertiesPage() {
     hasPrev: false,
   });
 
-  // Catégories pour les filtres (chargées séparément)
+  // Catégories pour les filtres
   const [availableCategories, setAvailableCategories] = useState<string[]>([]);
 
-  // Fonction pour construire l'URL de l'API avec tous les paramètres
-  const buildApiUrl = useCallback(
-    (filters: typeof searchFilters, page: number, pageSize: number) => {
+  // ✅ FIX: Fonction de fetch SANS dépendance sur pagination
+  const fetchProperties = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError('');
+
       const params = new URLSearchParams({
-        page: page.toString(),
-        pageSize: pageSize.toString(),
+        page: pagination.currentPage.toString(),
+        pageSize: pagination.pageSize.toString(),
         include: 'concepts',
-        active: 'false', // Récupérer toutes les propriétés pour la gestion
+        active: 'false',
       });
 
-      if (filters.searchTerm.trim()) {
-        params.set('search', filters.searchTerm.trim());
+      if (searchFilters.searchTerm.trim()) {
+        params.set('search', searchFilters.searchTerm.trim());
       }
-      if (filters.categoryFilter !== 'all') {
-        params.set('category', filters.categoryFilter);
+      if (searchFilters.categoryFilter !== 'all') {
+        params.set('category', searchFilters.categoryFilter);
       }
-      if (filters.activeFilter !== 'all') {
-        params.set('status', filters.activeFilter); // active/inactive
+      if (searchFilters.activeFilter !== 'all') {
+        params.set('status', searchFilters.activeFilter);
       }
 
-      return `/api/properties?${params.toString()}`;
-    },
-    [],
-  );
+      const url = `/api/properties?${params.toString()}`;
+      console.log('🔄 Fetching properties from:', url);
 
-  // Charger les propriétés avec pagination
-  const fetchProperties = useCallback(
-    async (filters: typeof searchFilters, page: number, customPageSize?: number) => {
-      try {
-        setLoading(true);
-        setError('');
+      const response = await fetch(url);
 
-        const effectivePageSize = customPageSize || pagination.pageSize;
-        const url = buildApiUrl(filters, page, effectivePageSize);
-        const response = await fetch(url);
-
-        if (!response.ok) {
-          throw new Error('Erreur lors du chargement des propriétés');
-        }
-
-        const data = await response.json();
-
-        setProperties(data.properties || []);
-        setPagination({
-          page: data.pagination.page,
-          pageSize: data.pagination.pageSize,
-          totalCount: data.pagination.totalCount,
-          totalPages: data.pagination.totalPages,
-          hasNext: data.pagination.hasNext,
-          hasPrev: data.pagination.hasPrev,
-        });
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Erreur inconnue');
-        setProperties([]);
-        setPagination((prev) => ({ ...prev, totalCount: 0, totalPages: 0 }));
-      } finally {
-        setLoading(false);
+      if (!response.ok) {
+        throw new Error('Erreur lors du chargement des propriétés');
       }
-    },
-    [buildApiUrl],
-  );
 
-  // Charger les catégories disponibles (pour les filtres)
+      const data = await response.json();
+
+      setProperties(data.properties || []);
+      setServerPagination({
+        page: data.pagination.page,
+        pageSize: data.pagination.pageSize,
+        totalCount: data.pagination.totalCount,
+        totalPages: data.pagination.totalPages,
+        hasNext: data.pagination.hasNext,
+        hasPrev: data.pagination.hasPrev,
+      });
+    } catch (err) {
+      console.error('❌ Error fetching properties:', err);
+      setError(err instanceof Error ? err.message : 'Erreur inconnue');
+      setProperties([]);
+      setServerPagination((prev) => ({ ...prev, totalCount: 0, totalPages: 0 }));
+    } finally {
+      setLoading(false);
+    }
+  }, [searchFilters, pagination.currentPage, pagination.pageSize]);
+
+  // Charger les catégories disponibles (une seule fois)
   const fetchCategories = useCallback(async () => {
     try {
       const response = await fetch('/api/properties/categories');
@@ -128,44 +112,50 @@ export default function PropertiesPage() {
         setAvailableCategories(data.categories || []);
       }
     } catch (err) {
-      console.error('Erreur lors du chargement des catégories:', err);
+      console.error('❌ Error fetching categories:', err);
     }
   }, []);
 
-  // Effet initial : charger les données
+  // ✅ FIX: Effet pour les catégories (UNE SEULE FOIS au montage)
   useEffect(() => {
     fetchCategories();
-    fetchProperties(searchFilters, 1, 12); // Utiliser pageSize par défaut
-  }, []); // Pas de dépendances pour éviter les boucles
+  }, []);
 
-  // Handler pour les changements de recherche/filtres
+  // ✅ FIX: Effet pour le fetch des données (SEULEMENT quand nécessaire)
+  useEffect(() => {
+    fetchProperties();
+  }, [fetchProperties]);
+
+  // ✅ FIX: Handler pour la recherche
   const handleSearch = useCallback(
     (searchTerm: string, categoryFilter: string, activeFilter: string) => {
+      console.log('🔍 Search triggered:', { searchTerm, categoryFilter, activeFilter });
+
       const newFilters = { searchTerm, categoryFilter, activeFilter };
       setSearchFilters(newFilters);
-      // Revenir à la page 1 lors d'une nouvelle recherche
-      fetchProperties(newFilters, 1);
+      pagination.resetPagination();
     },
-    [fetchProperties],
+    [pagination],
   );
 
-  // Handler pour les changements de page
+  // ✅ FIX: Handlers de pagination
   const handlePageChange = useCallback(
     (newPage: number) => {
-      fetchProperties(searchFilters, newPage);
+      console.log('📄 Page change to:', newPage);
+      pagination.onPageChange(newPage);
     },
-    [fetchProperties, searchFilters],
+    [pagination],
   );
 
-  // Handler pour changer la taille de page
   const handlePageSizeChange = useCallback(
     (newPageSize: number) => {
-      setPagination((prev) => ({ ...prev, pageSize: newPageSize }));
-      fetchProperties(searchFilters, 1, newPageSize); // Revenir à la page 1 avec nouvelle pageSize
+      console.log('📏 Page size change to:', newPageSize);
+      pagination.onPageSizeChange(newPageSize);
     },
-    [fetchProperties, searchFilters],
+    [pagination],
   );
 
+  // Actions des propriétés
   const handleCreateProperty = () => {
     setEditingProperty(null);
     setIsFormOpen(true);
@@ -191,8 +181,7 @@ export default function PropertiesPage() {
         throw new Error(errorData.error || 'Erreur lors de la suppression');
       }
 
-      // Recharger la page actuelle
-      fetchProperties(searchFilters, pagination.page);
+      await fetchProperties();
     } catch (err) {
       alert(
         'Erreur lors de la suppression: ' +
@@ -219,10 +208,11 @@ export default function PropertiesPage() {
         throw new Error(errorData.error || 'Erreur lors de la sauvegarde');
       }
 
-      // Fermer le formulaire et recharger
       setIsFormOpen(false);
       setEditingProperty(null);
-      fetchProperties(searchFilters, pagination.page);
+
+      await fetchProperties();
+      await fetchCategories();
     } catch (err) {
       alert('Erreur: ' + (err instanceof Error ? err.message : 'Erreur inconnue'));
     }
@@ -233,6 +223,7 @@ export default function PropertiesPage() {
     setEditingProperty(null);
   };
 
+  // Loading state
   if (loading && properties.length === 0) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -244,6 +235,7 @@ export default function PropertiesPage() {
     );
   }
 
+  // Error state
   if (error && properties.length === 0) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -252,7 +244,7 @@ export default function PropertiesPage() {
           <h2 className="text-2xl font-bold text-gray-900 mb-4">Erreur</h2>
           <p className="text-gray-600 mb-4">{error}</p>
           <button
-            onClick={() => fetchProperties(searchFilters, pagination.page)}
+            onClick={() => fetchProperties()}
             className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
           >
             Réessayer
@@ -271,9 +263,9 @@ export default function PropertiesPage() {
             <div>
               <h1 className="text-3xl font-bold text-gray-900">Propriétés Linguistiques</h1>
               <p className="text-gray-600 mt-2">
-                Gérez vos propriétés et catégories • {pagination.totalCount} propriété
-                {pagination.totalCount !== 1 ? 's' : ''} au total • Page {pagination.page} sur{' '}
-                {pagination.totalPages}
+                Gérez vos propriétés et catégories • {serverPagination.totalCount} propriété
+                {serverPagination.totalCount !== 1 ? 's' : ''} au total • Page{' '}
+                {pagination.currentPage} sur {serverPagination.totalPages}
               </p>
             </div>
             <button
@@ -290,8 +282,8 @@ export default function PropertiesPage() {
         <PropertySearchAndFilter
           onSearch={handleSearch}
           categories={availableCategories}
-          totalCount={pagination.totalCount}
-          filteredCount={pagination.totalCount} // Maintenant égal car filtrage côté serveur
+          totalCount={serverPagination.totalCount}
+          filteredCount={serverPagination.totalCount}
           loading={loading}
         />
 
@@ -301,14 +293,14 @@ export default function PropertiesPage() {
             <div className="text-gray-400 text-6xl mb-4">🏷️</div>
             <h3 className="text-lg font-medium text-gray-900 mb-2">Aucune propriété trouvée</h3>
             <p className="text-gray-600">
-              {pagination.totalCount === 0
+              {serverPagination.totalCount === 0
                 ? 'Créez votre première propriété pour commencer'
                 : 'Essayez de modifier vos critères de recherche'}
             </p>
           </div>
         ) : (
           <>
-            {/* Loading overlay pour les rechargements */}
+            {/* Loading overlay */}
             <div className="relative">
               {loading && (
                 <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-10">
@@ -329,11 +321,11 @@ export default function PropertiesPage() {
             </div>
 
             {/* Pagination */}
-            {pagination.totalPages > 1 && (
+            {serverPagination.totalPages > 1 && (
               <Pagination
-                currentPage={pagination.page}
-                totalPages={pagination.totalPages}
-                totalCount={pagination.totalCount}
+                currentPage={pagination.currentPage}
+                totalPages={serverPagination.totalPages}
+                totalCount={serverPagination.totalCount}
                 pageSize={pagination.pageSize}
                 onPageChange={handlePageChange}
                 onPageSizeChange={handlePageSizeChange}

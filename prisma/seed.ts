@@ -2,7 +2,7 @@
 // prisma/seed.ts - Script de seed mis à jour
 // ============================================
 
-import { CATEGORY_KEYS } from '@/app/lib/categories';
+import { CATEGORY_KEYS } from '@/lib/categories';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 

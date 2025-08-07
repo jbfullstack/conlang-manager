@@ -9,6 +9,8 @@ interface PaginationProps {
   pageSizeOptions?: number[];
 }
 
+export const PAGE_SIZE_OPT = [6, 12, 24, 48];
+
 export default function Pagination({
   currentPage,
   totalPages,
@@ -17,7 +19,7 @@ export default function Pagination({
   onPageChange,
   onPageSizeChange,
   loading = false,
-  pageSizeOptions = [6, 12, 24, 48],
+  pageSizeOptions = PAGE_SIZE_OPT,
 }: PaginationProps) {
   // Calculer les numéros de page à afficher
   const getPageNumbers = () => {

@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import ConceptCard from '../components/features/concepts/ConceptCard';
 import ConceptForm from '../components/features/concepts/ConceptForm';
-import SearchAndFilter from '../components/features/concepts/SearchAndFilter';
+import ConceptSearchAndFilter from '../components/features/concepts/ConceptSearchAndFilter';
 import Pagination from '../components/ui/Pagination';
+import { usePagination } from '@/hooks/usePagination';
 
 interface Concept {
   id: string;
@@ -36,12 +37,20 @@ export default function ConceptsPage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingConcept, setEditingConcept] = useState<Concept | null>(null);
 
-  // Pagination et filtres - état centralisé
+  // ✅ Utiliser le hook usePagination corrigé
+  const pagination = usePagination({
+    defaultPageSize: 12,
+    defaultPage: 1,
+  });
+
+  // Filtres de recherche
   const [searchFilters, setSearchFilters] = useState({
     searchTerm: '',
     typeFilter: 'all',
   });
-  const [pagination, setPagination] = useState<PaginationInfo>({
+
+  // Info de pagination du serveur
+  const [serverPagination, setServerPagination] = useState<PaginationInfo>({
     page: 1,
     pageSize: 12,
     totalCount: 0,
@@ -50,67 +59,58 @@ export default function ConceptsPage() {
     hasPrev: false,
   });
 
-  // Types pour les filtres (chargés séparément)
+  // Types pour les filtres
   const [availableTypes, setAvailableTypes] = useState<string[]>([]);
 
-  // Fonction pour construire l'URL de l'API avec tous les paramètres
-  const buildApiUrl = useCallback(
-    (filters: typeof searchFilters, page: number, pageSize: number) => {
+  // ✅ FIX: Fonction de fetch SANS dépendance sur pagination
+  const fetchConcepts = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError('');
+
       const params = new URLSearchParams({
-        page: page.toString(),
-        pageSize: pageSize.toString(),
+        page: pagination.currentPage.toString(),
+        pageSize: pagination.pageSize.toString(),
       });
 
-      if (filters.searchTerm.trim()) {
-        params.set('search', filters.searchTerm.trim());
+      if (searchFilters.searchTerm.trim()) {
+        params.set('search', searchFilters.searchTerm.trim());
       }
-      if (filters.typeFilter !== 'all') {
-        params.set('type', filters.typeFilter);
+      if (searchFilters.typeFilter !== 'all') {
+        params.set('type', searchFilters.typeFilter);
       }
 
-      return `/api/concepts?${params.toString()}`;
-    },
-    [],
-  );
+      const url = `/api/concepts?${params.toString()}`;
+      console.log('🔄 Fetching concepts from:', url);
 
-  // Charger les concepts avec pagination
-  const fetchConcepts = useCallback(
-    async (filters: typeof searchFilters, page: number, customPageSize?: number) => {
-      try {
-        setLoading(true);
-        setError('');
+      const response = await fetch(url);
 
-        const effectivePageSize = customPageSize || pagination.pageSize;
-        const url = buildApiUrl(filters, page, effectivePageSize);
-        const response = await fetch(url);
-
-        if (!response.ok) {
-          throw new Error('Erreur lors du chargement des concepts');
-        }
-
-        const data = await response.json();
-
-        setConcepts(data.concepts || []);
-        setPagination({
-          page: data.pagination.page,
-          pageSize: data.pagination.pageSize,
-          totalCount: data.pagination.totalCount,
-          totalPages: data.pagination.totalPages,
-          hasNext: data.pagination.hasNext,
-          hasPrev: data.pagination.hasPrev,
-        });
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Erreur inconnue');
-        setConcepts([]);
-        setPagination((prev) => ({ ...prev, totalCount: 0, totalPages: 0 }));
-      } finally {
-        setLoading(false);
+      if (!response.ok) {
+        throw new Error('Erreur lors du chargement des concepts');
       }
-    },
-    [buildApiUrl],
-  );
 
-  // Charger les types disponibles (pour les filtres)
+      const data = await response.json();
+
+      setConcepts(data.concepts || []);
+      setServerPagination({
+        page: data.pagination.page,
+        pageSize: data.pagination.pageSize,
+        totalCount: data.pagination.totalCount,
+        totalPages: data.pagination.totalPages,
+        hasNext: data.pagination.hasNext,
+        hasPrev: data.pagination.hasPrev,
+      });
+    } catch (err) {
+      console.error('❌ Error fetching concepts:', err);
+      setError(err instanceof Error ? err.message : 'Erreur inconnue');
+      setConcepts([]);
+      setServerPagination((prev) => ({ ...prev, totalCount: 0, totalPages: 0 }));
+    } finally {
+      setLoading(false);
+    }
+  }, [searchFilters, pagination.currentPage, pagination.pageSize]);
+
+  // Charger les types disponibles (une seule fois)
   const fetchTypes = useCallback(async () => {
     try {
       const response = await fetch('/api/concepts/types');
@@ -119,45 +119,50 @@ export default function ConceptsPage() {
         setAvailableTypes(data.types || []);
       }
     } catch (err) {
-      console.error('Erreur lors du chargement des types:', err);
+      console.error('❌ Error fetching types:', err);
     }
   }, []);
 
-  // Effet initial : charger les données
+  // ✅ FIX: Effet pour les types (UNE SEULE FOIS au montage)
   useEffect(() => {
     fetchTypes();
-    fetchConcepts(searchFilters, 1, 12); // Utiliser pageSize par défaut
-  }, []); // Pas de dépendances pour éviter les boucles
+  }, []);
 
-  // Handler pour les changements de recherche/filtres
+  // ✅ FIX: Effet pour le fetch des données (SEULEMENT quand nécessaire)
+  useEffect(() => {
+    fetchConcepts();
+  }, [fetchConcepts]);
+
+  // ✅ FIX: Handler pour la recherche
   const handleSearch = useCallback(
     (searchTerm: string, typeFilter: string) => {
+      console.log('🔍 Search triggered:', { searchTerm, typeFilter });
+
       const newFilters = { searchTerm, typeFilter };
       setSearchFilters(newFilters);
-      // Revenir à la page 1 lors d'une nouvelle recherche
-      fetchConcepts(newFilters, 1);
+      pagination.resetPagination();
     },
-    [fetchConcepts],
+    [pagination],
   );
 
-  // Handler pour les changements de page
+  // ✅ FIX: Handlers de pagination
   const handlePageChange = useCallback(
     (newPage: number) => {
-      fetchConcepts(searchFilters, newPage);
+      console.log('📄 Page change to:', newPage);
+      pagination.onPageChange(newPage);
     },
-    [fetchConcepts, searchFilters],
+    [pagination],
   );
 
-  // Handler pour changer la taille de page
   const handlePageSizeChange = useCallback(
     (newPageSize: number) => {
-      // Mettre à jour le state de pagination ET déclencher un fetch avec la nouvelle taille
-      setPagination((prev) => ({ ...prev, pageSize: newPageSize }));
-      fetchConcepts(searchFilters, 1, newPageSize); // Revenir à la page 1 avec nouvelle pageSize
+      console.log('📏 Page size change to:', newPageSize);
+      pagination.onPageSizeChange(newPageSize);
     },
-    [fetchConcepts, searchFilters],
+    [pagination],
   );
 
+  // Actions des concepts
   const handleCreateConcept = () => {
     setEditingConcept(null);
     setIsFormOpen(true);
@@ -182,8 +187,7 @@ export default function ConceptsPage() {
         throw new Error('Erreur lors de la suppression');
       }
 
-      // Recharger la page actuelle
-      fetchConcepts(searchFilters, pagination.page);
+      await fetchConcepts();
     } catch (err) {
       alert(
         'Erreur lors de la suppression: ' +
@@ -210,10 +214,9 @@ export default function ConceptsPage() {
         throw new Error(errorData.error || 'Erreur lors de la sauvegarde');
       }
 
-      // Fermer le formulaire et recharger
       setIsFormOpen(false);
       setEditingConcept(null);
-      fetchConcepts(searchFilters, pagination.page);
+      await fetchConcepts();
     } catch (err) {
       alert('Erreur: ' + (err instanceof Error ? err.message : 'Erreur inconnue'));
     }
@@ -224,6 +227,7 @@ export default function ConceptsPage() {
     setEditingConcept(null);
   };
 
+  // Loading state
   if (loading && concepts.length === 0) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -235,6 +239,7 @@ export default function ConceptsPage() {
     );
   }
 
+  // Error state
   if (error && concepts.length === 0) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -243,7 +248,7 @@ export default function ConceptsPage() {
           <h2 className="text-2xl font-bold text-gray-900 mb-4">Erreur</h2>
           <p className="text-gray-600 mb-4">{error}</p>
           <button
-            onClick={() => fetchConcepts(searchFilters, pagination.page)}
+            onClick={() => fetchConcepts()}
             className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
           >
             Réessayer
@@ -262,9 +267,9 @@ export default function ConceptsPage() {
             <div>
               <h1 className="text-3xl font-bold text-gray-900">Concepts Primitifs</h1>
               <p className="text-gray-600 mt-2">
-                Gérez vos concepts de base • {pagination.totalCount} concept
-                {pagination.totalCount !== 1 ? 's' : ''} au total • Page {pagination.page} sur{' '}
-                {pagination.totalPages}
+                Gérez vos concepts de base • {serverPagination.totalCount} concept
+                {serverPagination.totalCount !== 1 ? 's' : ''} au total • Page{' '}
+                {pagination.currentPage} sur {serverPagination.totalPages}
               </p>
             </div>
             <button
@@ -278,11 +283,11 @@ export default function ConceptsPage() {
         </div>
 
         {/* Search and Filter */}
-        <SearchAndFilter
+        <ConceptSearchAndFilter
           onSearch={handleSearch}
           types={availableTypes}
-          totalCount={pagination.totalCount}
-          filteredCount={pagination.totalCount} // Maintenant égal car filtrage côté serveur
+          totalCount={serverPagination.totalCount}
+          filteredCount={serverPagination.totalCount}
           loading={loading}
         />
 
@@ -292,14 +297,14 @@ export default function ConceptsPage() {
             <div className="text-gray-400 text-6xl mb-4">🔍</div>
             <h3 className="text-lg font-medium text-gray-900 mb-2">Aucun concept trouvé</h3>
             <p className="text-gray-600">
-              {pagination.totalCount === 0
+              {serverPagination.totalCount === 0
                 ? 'Créez votre premier concept pour commencer'
                 : 'Essayez de modifier vos critères de recherche'}
             </p>
           </div>
         ) : (
           <>
-            {/* Loading overlay pour les rechargements */}
+            {/* Loading overlay */}
             <div className="relative">
               {loading && (
                 <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-10">
@@ -320,11 +325,11 @@ export default function ConceptsPage() {
             </div>
 
             {/* Pagination */}
-            {pagination.totalPages > 1 && (
+            {serverPagination.totalPages > 1 && (
               <Pagination
-                currentPage={pagination.page}
-                totalPages={pagination.totalPages}
-                totalCount={pagination.totalCount}
+                currentPage={pagination.currentPage}
+                totalPages={serverPagination.totalPages}
+                totalCount={serverPagination.totalCount}
                 pageSize={pagination.pageSize}
                 onPageChange={handlePageChange}
                 onPageSizeChange={handlePageSizeChange}

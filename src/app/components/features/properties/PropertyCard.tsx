@@ -15,8 +15,8 @@
 //   createdAt: string;
 // }
 
-import { Property } from '@/app/interfaces/property.interface';
-import { getCategoryColor } from '@/app/lib/categories';
+import { Property } from '@/interfaces/property.interface';
+import { getCategoryColor } from '@/lib/categories';
 
 interface PropertyCardProps {
   property: Property;

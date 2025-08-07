@@ -1,5 +1,13 @@
-import { useState, useCallback } from 'react';
-import { getCategoryLabel, getCategoriesByGroup } from '../../../lib/categories';
+import {
+  useState,
+  useCallback,
+  useRef,
+  JSXElementConstructor,
+  ReactElement,
+  ReactNode,
+  ReactPortal,
+} from 'react';
+import { getCategoryLabel, getCategoriesByGroup } from '../../../../lib/categories';
 
 interface PropertySearchAndFilterProps {
   onSearch: (searchTerm: string, categoryFilter: string, activeFilter: string) => void;
@@ -21,30 +29,43 @@ export default function PropertySearchAndFilter({
   const [activeFilter, setActiveFilter] = useState('all');
   const [showGroupedCategories, setShowGroupedCategories] = useState(false);
 
-  // Fonction de recherche avec debounce
-  const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null);
+  // ✅ FIX: Utiliser useRef pour le timeout
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const handleSearchWithDebounce = useCallback(
-    (term: string, catFilter: string, actFilter: string) => {
-      if (searchTimeout) {
-        clearTimeout(searchTimeout);
-      }
+  // ✅ FIX: Fonction de déclenchement immédiat de la recherche
+  const triggerSearch = useCallback(() => {
+    // Nettoyer le timeout en cours
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+      searchTimeoutRef.current = null;
+    }
+    onSearch(searchTerm, categoryFilter, activeFilter);
+  }, [searchTerm, categoryFilter, activeFilter, onSearch]);
 
-      const timeout = setTimeout(() => {
-        onSearch(term, catFilter, actFilter);
-      }, 300); // 300ms de debounce
-
-      setSearchTimeout(timeout);
-    },
-    [onSearch, searchTimeout],
-  );
-
+  // ✅ FIX: Debounce amélioré avec possibilité de déclenchement immédiat
   const handleSearchTermChange = useCallback(
     (value: string) => {
       setSearchTerm(value);
-      handleSearchWithDebounce(value, categoryFilter, activeFilter);
+
+      // Nettoyer le timeout précédent
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+        searchTimeoutRef.current = null;
+      }
+
+      // ✅ FIX: Si on efface complètement, déclencher immédiatement
+      if (value === '') {
+        onSearch('', categoryFilter, activeFilter);
+        return;
+      }
+
+      // Sinon, utiliser le debounce mais avec un délai plus long
+      searchTimeoutRef.current = setTimeout(() => {
+        onSearch(value, categoryFilter, activeFilter);
+        searchTimeoutRef.current = null;
+      }, 500); // ✅ FIX: 500ms pour éviter les recherches trop rapides
     },
-    [categoryFilter, activeFilter, handleSearchWithDebounce],
+    [onSearch, categoryFilter, activeFilter],
   );
 
   const handleCategoryFilterChange = useCallback(
@@ -64,11 +85,28 @@ export default function PropertySearchAndFilter({
   );
 
   const handleReset = useCallback(() => {
+    // Nettoyer le timeout en cours
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+      searchTimeoutRef.current = null;
+    }
+
     setSearchTerm('');
     setCategoryFilter('all');
     setActiveFilter('all');
     onSearch('', 'all', 'all');
   }, [onSearch]);
+
+  // ✅ FIX: Handler pour la touche Entrée
+  const handleKeyPress = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        triggerSearch();
+      }
+    },
+    [triggerSearch],
+  );
 
   const handleQuickCategoryFilter = useCallback(
     (category: string) => {
@@ -82,9 +120,13 @@ export default function PropertySearchAndFilter({
 
   // Organiser les catégories par groupes pour un meilleur affichage
   const categoriesByGroup = {
-    conceptuel: getCategoriesByGroup('conceptuel').filter((cat) => categories.includes(cat.key)),
-    perceptuel: getCategoriesByGroup('perceptuel').filter((cat) => categories.includes(cat.key)),
-    linguistique: getCategoriesByGroup('linguistique').filter((cat) =>
+    conceptuel: getCategoriesByGroup('conceptuel').filter((cat: { key: string }) =>
+      categories.includes(cat.key),
+    ),
+    perceptuel: getCategoriesByGroup('perceptuel').filter((cat: { key: string }) =>
+      categories.includes(cat.key),
+    ),
+    linguistique: getCategoriesByGroup('linguistique').filter((cat: { key: string }) =>
       categories.includes(cat.key),
     ),
   };
@@ -92,9 +134,9 @@ export default function PropertySearchAndFilter({
   // Catégories utilisées qui ne sont pas dans le système centralisé
   const otherCategories = categories.filter(
     (cat) =>
-      !getCategoriesByGroup('conceptuel').some((c) => c.key === cat) &&
-      !getCategoriesByGroup('perceptuel').some((c) => c.key === cat) &&
-      !getCategoriesByGroup('linguistique').some((c) => c.key === cat),
+      !getCategoriesByGroup('conceptuel').some((c: { key: string }) => c.key === cat) &&
+      !getCategoriesByGroup('perceptuel').some((c: { key: string }) => c.key === cat) &&
+      !getCategoriesByGroup('linguistique').some((c: { key: string }) => c.key === cat),
   );
 
   return (
@@ -108,8 +150,9 @@ export default function PropertySearchAndFilter({
               placeholder="Rechercher par nom, description ou catégorie..."
               value={searchTerm}
               onChange={(e) => handleSearchTermChange(e.target.value)}
+              onKeyPress={handleKeyPress} // ✅ FIX: Ajout de la gestion d'Entrée
               disabled={loading}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full pl-10 pr-12 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
             />
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               {loading ? (
@@ -118,6 +161,16 @@ export default function PropertySearchAndFilter({
                 <span className="text-gray-400">🔍</span>
               )}
             </div>
+            {/* ✅ FIX: Bouton de recherche */}
+            {searchTerm && !loading && (
+              <button
+                onClick={triggerSearch}
+                className="absolute inset-y-0 right-0 pr-3 flex items-center text-blue-600 hover:text-blue-800"
+                title="Rechercher maintenant"
+              >
+                <span className="text-lg">⏎</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -135,38 +188,113 @@ export default function PropertySearchAndFilter({
 
               {/* Groupes de catégories */}
               {categoriesByGroup.conceptuel.length > 0 && (
-                <optgroup label="🎯 Conceptuel">
-                  {categoriesByGroup.conceptuel.map((cat) => (
-                    <option key={cat.key} value={cat.key}>
-                      {cat.label}
-                    </option>
-                  ))}
+                <optgroup label="🧠 Conceptuel">
+                  {categoriesByGroup.conceptuel.map(
+                    (cat: {
+                      key: string;
+                      label:
+                        | string
+                        | number
+                        | bigint
+                        | boolean
+                        | ReactElement<unknown, string | JSXElementConstructor<any>>
+                        | Iterable<ReactNode>
+                        | ReactPortal
+                        | Promise<
+                            | string
+                            | number
+                            | bigint
+                            | boolean
+                            | ReactPortal
+                            | ReactElement<unknown, string | JSXElementConstructor<any>>
+                            | Iterable<ReactNode>
+                            | null
+                            | undefined
+                          >
+                        | null
+                        | undefined;
+                    }) => (
+                      <option key={cat.key as string} value={cat.key as string}>
+                        {cat.label}
+                      </option>
+                    ),
+                  )}
                 </optgroup>
               )}
 
               {categoriesByGroup.perceptuel.length > 0 && (
                 <optgroup label="👁️ Perceptuel">
-                  {categoriesByGroup.perceptuel.map((cat) => (
-                    <option key={cat.key} value={cat.key}>
-                      {cat.label}
-                    </option>
-                  ))}
+                  {categoriesByGroup.perceptuel.map(
+                    (cat: {
+                      key: string;
+                      label:
+                        | string
+                        | number
+                        | bigint
+                        | boolean
+                        | ReactElement<unknown, string | JSXElementConstructor<any>>
+                        | Iterable<ReactNode>
+                        | ReactPortal
+                        | Promise<
+                            | string
+                            | number
+                            | bigint
+                            | boolean
+                            | ReactPortal
+                            | ReactElement<unknown, string | JSXElementConstructor<any>>
+                            | Iterable<ReactNode>
+                            | null
+                            | undefined
+                          >
+                        | null
+                        | undefined;
+                    }) => (
+                      <option key={cat.key as string} value={cat.key as string}>
+                        {cat.label}
+                      </option>
+                    ),
+                  )}
                 </optgroup>
               )}
 
               {categoriesByGroup.linguistique.length > 0 && (
                 <optgroup label="🗣️ Linguistique">
-                  {categoriesByGroup.linguistique.map((cat) => (
-                    <option key={cat.key} value={cat.key}>
-                      {cat.label}
-                    </option>
-                  ))}
+                  {categoriesByGroup.linguistique.map(
+                    (cat: {
+                      key: string;
+                      label:
+                        | string
+                        | number
+                        | bigint
+                        | boolean
+                        | ReactElement<unknown, string | JSXElementConstructor<any>>
+                        | Iterable<ReactNode>
+                        | ReactPortal
+                        | Promise<
+                            | string
+                            | number
+                            | bigint
+                            | boolean
+                            | ReactPortal
+                            | ReactElement<unknown, string | JSXElementConstructor<any>>
+                            | Iterable<ReactNode>
+                            | null
+                            | undefined
+                          >
+                        | null
+                        | undefined;
+                    }) => (
+                      <option key={cat.key as string} value={cat.key as string}>
+                        {cat.label}
+                      </option>
+                    ),
+                  )}
                 </optgroup>
               )}
 
               {/* Autres catégories */}
               {otherCategories.length > 0 && (
-                <optgroup label="📂 Autres">
+                <optgroup label="🏷️ Autres">
                   {otherCategories.map((category) => (
                     <option key={category} value={category}>
                       {getCategoryLabel(category)}
@@ -190,6 +318,17 @@ export default function PropertySearchAndFilter({
               <option value="inactive">Inactives</option>
             </select>
           </div>
+
+          {/* ✅ FIX: Bouton de recherche explicite */}
+          <button
+            onClick={triggerSearch}
+            disabled={loading}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center space-x-2"
+            title="Lancer la recherche"
+          >
+            <span>🔍</span>
+            <span>Rechercher</span>
+          </button>
 
           {/* Bouton reset */}
           {hasFilters && (
@@ -219,11 +358,11 @@ export default function PropertySearchAndFilter({
           <div className="mt-2 sm:mt-0 flex items-center space-x-4">
             {searchTerm && <span className="text-blue-600">🔍 "{searchTerm}"</span>}
             {categoryFilter !== 'all' && (
-              <span className="text-green-600">📂 {getCategoryLabel(categoryFilter)}</span>
+              <span className="text-green-600">🏷️ {getCategoryLabel(categoryFilter)}</span>
             )}
             {activeFilter !== 'all' && (
               <span className="text-purple-600">
-                🔄 {activeFilter === 'active' ? 'Actives' : 'Inactives'}
+                🔍 {activeFilter === 'active' ? 'Actives' : 'Inactives'}
               </span>
             )}
           </div>
@@ -251,10 +390,10 @@ export default function PropertySearchAndFilter({
 
                 const groupEmoji =
                   {
-                    conceptuel: '🎯',
+                    conceptuel: '🧠',
                     perceptuel: '👁️',
                     linguistique: '🗣️',
-                  }[groupName as keyof typeof categoriesByGroup] || '📂';
+                  }[groupName as keyof typeof categoriesByGroup] || '🏷️';
 
                 return (
                   <div key={groupName}>
@@ -262,16 +401,42 @@ export default function PropertySearchAndFilter({
                       {groupEmoji} {groupName.charAt(0).toUpperCase() + groupName.slice(1)}
                     </p>
                     <div className="flex flex-wrap gap-1">
-                      {groupCategories.map((cat) => (
-                        <button
-                          key={cat.key}
-                          onClick={() => handleQuickCategoryFilter(cat.key)}
-                          className="px-2 py-1 text-xs bg-gray-100 hover:bg-blue-100 text-gray-700 hover:text-blue-700 rounded transition-colors"
-                          title={cat.description}
-                        >
-                          {cat.label}
-                        </button>
-                      ))}
+                      {groupCategories.map(
+                        (cat: {
+                          key: string;
+                          description: string | undefined;
+                          label:
+                            | string
+                            | number
+                            | bigint
+                            | boolean
+                            | ReactElement<unknown, string | JSXElementConstructor<any>>
+                            | Iterable<ReactNode>
+                            | ReactPortal
+                            | Promise<
+                                | string
+                                | number
+                                | bigint
+                                | boolean
+                                | ReactPortal
+                                | ReactElement<unknown, string | JSXElementConstructor<any>>
+                                | Iterable<ReactNode>
+                                | null
+                                | undefined
+                              >
+                            | null
+                            | undefined;
+                        }) => (
+                          <button
+                            key={cat.key as string}
+                            onClick={() => handleQuickCategoryFilter(cat.key as string)}
+                            className="px-2 py-1 text-xs bg-gray-100 hover:bg-blue-100 text-gray-700 hover:text-blue-700 rounded transition-colors"
+                            title={cat.description}
+                          >
+                            {cat.label}
+                          </button>
+                        ),
+                      )}
                     </div>
                   </div>
                 );
@@ -280,7 +445,7 @@ export default function PropertySearchAndFilter({
               {/* Autres catégories */}
               {otherCategories.length > 0 && (
                 <div>
-                  <p className="text-xs font-medium text-gray-600 mb-1">📂 Autres</p>
+                  <p className="text-xs font-medium text-gray-600 mb-1">🏷️ Autres</p>
                   <div className="flex flex-wrap gap-1">
                     {otherCategories.map((category) => (
                       <button

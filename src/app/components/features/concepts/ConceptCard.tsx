@@ -1,4 +1,4 @@
-import { Concept } from '@/app/interfaces/concept.interface';
+import { Concept } from '@/interfaces/concept.interface';
 
 interface ConceptCardProps {
   concept: Concept;

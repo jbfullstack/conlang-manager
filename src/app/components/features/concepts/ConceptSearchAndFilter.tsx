@@ -1,6 +1,6 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 
-interface SearchAndFilterProps {
+interface ConceptSearchAndFilterProps {
   onSearch: (searchTerm: string, typeFilter: string) => void;
   types: string[];
   totalCount: number;
@@ -8,40 +8,53 @@ interface SearchAndFilterProps {
   loading?: boolean;
 }
 
-export default function SearchAndFilter({
+export default function ConceptSearchAndFilter({
   onSearch,
   types,
   totalCount,
   filteredCount,
   loading = false,
-}: SearchAndFilterProps) {
+}: ConceptSearchAndFilterProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
 
-  // Fonction de recherche avec debounce
-  const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null);
+  // ✅ FIX: Utiliser useRef pour le timeout
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const handleSearchWithDebounce = useCallback(
-    (term: string, tFilter: string) => {
-      if (searchTimeout) {
-        clearTimeout(searchTimeout);
-      }
+  // ✅ FIX: Fonction de déclenchement immédiat de la recherche
+  const triggerSearch = useCallback(() => {
+    // Nettoyer le timeout en cours
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+      searchTimeoutRef.current = null;
+    }
+    onSearch(searchTerm, typeFilter);
+  }, [searchTerm, typeFilter, onSearch]);
 
-      const timeout = setTimeout(() => {
-        onSearch(term, tFilter);
-      }, 300); // 300ms de debounce
-
-      setSearchTimeout(timeout);
-    },
-    [onSearch, searchTimeout],
-  );
-
+  // ✅ FIX: Debounce amélioré avec possibilité de déclenchement immédiat
   const handleSearchTermChange = useCallback(
     (value: string) => {
       setSearchTerm(value);
-      handleSearchWithDebounce(value, typeFilter);
+
+      // Nettoyer le timeout précédent
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+        searchTimeoutRef.current = null;
+      }
+
+      // ✅ FIX: Si on efface complètement, déclencher immédiatement
+      if (value === '') {
+        onSearch('', typeFilter);
+        return;
+      }
+
+      // Sinon, utiliser le debounce mais avec un délai plus court
+      searchTimeoutRef.current = setTimeout(() => {
+        onSearch(value, typeFilter);
+        searchTimeoutRef.current = null;
+      }, 500); // ✅ FIX: Augmenter à 500ms pour éviter les recherches trop rapides
     },
-    [typeFilter, handleSearchWithDebounce],
+    [onSearch, typeFilter],
   );
 
   const handleTypeFilterChange = useCallback(
@@ -53,10 +66,27 @@ export default function SearchAndFilter({
   );
 
   const handleReset = useCallback(() => {
+    // Nettoyer le timeout en cours
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+      searchTimeoutRef.current = null;
+    }
+
     setSearchTerm('');
     setTypeFilter('all');
     onSearch('', 'all');
   }, [onSearch]);
+
+  // ✅ FIX: Handler pour la touche Entrée
+  const handleKeyPress = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        triggerSearch();
+      }
+    },
+    [triggerSearch],
+  );
 
   const handleQuickTypeFilter = useCallback(
     (type: string) => {
@@ -79,8 +109,9 @@ export default function SearchAndFilter({
               placeholder="Rechercher par mot, définition, type ou propriété..."
               value={searchTerm}
               onChange={(e) => handleSearchTermChange(e.target.value)}
+              onKeyPress={handleKeyPress} // ✅ FIX: Ajout de la gestion d'Entrée
               disabled={loading}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full pl-10 pr-12 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
             />
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               {loading ? (
@@ -89,6 +120,16 @@ export default function SearchAndFilter({
                 <span className="text-gray-400">🔍</span>
               )}
             </div>
+            {/* ✅ FIX: Bouton de recherche */}
+            {searchTerm && !loading && (
+              <button
+                onClick={triggerSearch}
+                className="absolute inset-y-0 right-0 pr-3 flex items-center text-blue-600 hover:text-blue-800"
+                title="Rechercher maintenant"
+              >
+                <span className="text-lg">⏎</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -110,6 +151,17 @@ export default function SearchAndFilter({
               ))}
             </select>
           </div>
+
+          {/* ✅ FIX: Bouton de recherche explicite */}
+          <button
+            onClick={triggerSearch}
+            disabled={loading}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center space-x-2"
+            title="Lancer la recherche"
+          >
+            <span>🔍</span>
+            <span>Rechercher</span>
+          </button>
 
           {/* Bouton reset */}
           {hasFilters && (
@@ -140,7 +192,7 @@ export default function SearchAndFilter({
             {searchTerm && <span className="text-blue-600">🔍 "{searchTerm}"</span>}
             {typeFilter !== 'all' && (
               <span className="text-green-600">
-                📂 {typeFilter.charAt(0).toUpperCase() + typeFilter.slice(1)}
+                🏷️ {typeFilter.charAt(0).toUpperCase() + typeFilter.slice(1)}
               </span>
             )}
           </div>
