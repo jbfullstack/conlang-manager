@@ -7,9 +7,10 @@ interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
-export async function GET(request: NextRequest, { params }: RouteParams) {
+export async function GET(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
-    const { id } = await params;
+    const params = await context.params;
+    const { id } = params;
     
     const concept = await prisma.concept.findUnique({
       where: { id },
@@ -57,9 +58,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   }
 }
 
-export async function PUT(request: NextRequest, { params }: RouteParams) {
+export async function PUT(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
-    const { id } = await params;
+    const params = await context.params;
+    const { id } = params;
     const body = await request.json();
     const { mot, definition, type, proprietes, etymologie, exemples, usageFrequency } = body;
 
@@ -169,9 +171,10 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 }
 
 
-export async function DELETE(request: NextRequest, { params }: RouteParams) {
+export async function DELETE(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
-    const { id } = await params;
+    const params = await context.params;
+    const { id } = params;
     
     await prisma.concept.update({
       where: { id },

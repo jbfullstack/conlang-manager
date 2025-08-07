@@ -57,3 +57,44 @@ export async function GET(request: NextRequest) {
     );
   }
 }
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { name, description, category } = body;
+
+    if (!name?.trim()) {
+      return NextResponse.json(
+        { error: 'Le nom de la propriété est requis' },
+        { status: 400 }
+      );
+    }
+
+    // Vérifier si la propriété existe déjà
+    const existing = await prisma.property.findUnique({
+      where: { name: name.trim().toLowerCase() }
+    });
+
+    if (existing) {
+      return NextResponse.json({ property: existing });
+    }
+
+    // Créer la nouvelle propriété
+    const property = await prisma.property.create({
+      data: {
+        name: name.trim().toLowerCase(),
+        description: description?.trim(),
+        category: category?.trim() || 'custom',
+        usageCount: 1
+      }
+    });
+
+    return NextResponse.json({ property }, { status: 201 });
+  } catch (error) {
+    console.error('Erreur POST property:', error);
+    return NextResponse.json(
+      { error: 'Erreur serveur' },
+      { status: 500 }
+    );
+  }
+}

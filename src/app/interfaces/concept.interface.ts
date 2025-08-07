@@ -1,3 +1,5 @@
+import { Property } from "./property.interface";
+
 export interface Concept {
   id: string;
   mot: string;
@@ -8,5 +10,13 @@ export interface Concept {
   exemples: string[];
   usageFrequency: number;
   user?: { username: string };
+  createdAt: string;
+}
+
+export interface ConceptProperty {
+  id: string;
+  conceptId: string;
+  propertyId: string;
+  property: Property;
   createdAt: string;
 }

@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
-import { Property } from '@/app/interfaces/property.interface';
 import { Concept } from '@/app/interfaces/concept.interface';
+import { Property } from '@/app/interfaces/property.interface';
+import { useState, useEffect, useRef } from 'react';
 
 interface ConceptFormProps {
-  concept: Concept | null; // null = création, objet = édition
+  concept: Concept | null;
   onSubmit: (data: any) => void;
   onCancel: () => void;
 }
@@ -20,13 +20,16 @@ export default function ConceptForm({ concept, onSubmit, onCancel }: ConceptForm
     usageFrequency: 0.5,
   });
 
-  const [newPropriete, setNewPropriete] = useState('');
-  const [newExemple, setNewExemple] = useState('');
-  const [errors, setErrors] = useState<Record<string, string>>({});
   const [availableProperties, setAvailableProperties] = useState<Property[]>([]);
-
   const [propertyInput, setPropertyInput] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
+
+  const [newExemple, setNewExemple] = useState('');
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const propertyInputRef = useRef<HTMLInputElement>(null);
+  const suggestionsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetchExistingProperties();
@@ -39,11 +42,38 @@ export default function ConceptForm({ concept, onSubmit, onCancel }: ConceptForm
       const data = await response.json();
       setAvailableProperties(data.properties || []);
     } catch (error) {
-      // setAvailableProperties(['liquide', 'solide', 'rapide', 'lumineux']);
-      console.error(`ConceptForm.fetchExistingProperties - ${error}`);
+      console.error('ConceptForm.fetchExistingProperties -', error);
+      // Fallback properties si l'API échoue
+      setAvailableProperties([
+        {
+          id: '1',
+          name: 'liquide',
+          category: 'physique',
+          usageCount: 5,
+          isActive: true,
+          createdAt: '',
+        },
+        {
+          id: '2',
+          name: 'solide',
+          category: 'physique',
+          usageCount: 3,
+          isActive: true,
+          createdAt: '',
+        },
+        {
+          id: '3',
+          name: 'rapide',
+          category: 'mouvement',
+          usageCount: 4,
+          isActive: true,
+          createdAt: '',
+        },
+      ] as Property[]);
     }
   };
 
+  // Filtrer les suggestions basées sur l'input
   const filteredSuggestions = availableProperties.filter(
     (prop) =>
       prop.name.toLowerCase().includes(propertyInput.toLowerCase()) &&
@@ -83,35 +113,96 @@ export default function ConceptForm({ concept, onSubmit, onCancel }: ConceptForm
       newErrors.definition = 'La définition est requise';
     }
 
-    if (!formData.type.trim()) {
-      newErrors.type = 'Le type est requis';
-    }
-
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!validateForm()) {
-      return;
-    }
-
+    if (!validateForm()) return;
     onSubmit(formData);
   };
 
-  const addPropriete = () => {
-    if (newPropriete.trim() && !formData.proprietes.includes(newPropriete.trim())) {
-      setFormData({
-        ...formData,
-        proprietes: [...formData.proprietes, newPropriete.trim()],
-      });
-      setNewPropriete('');
+  // Gestion des propriétés avec autocomplétion
+  const handlePropertyInputChange = (value: string) => {
+    setPropertyInput(value);
+    setShowSuggestions(value.length > 0);
+    setSelectedSuggestionIndex(-1);
+  };
+
+  const handlePropertyInputKeyDown = (e: React.KeyboardEvent) => {
+    if (!showSuggestions) return;
+
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        setSelectedSuggestionIndex((prev) =>
+          prev < filteredSuggestions.length - 1 ? prev + 1 : 0,
+        );
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        setSelectedSuggestionIndex((prev) =>
+          prev > 0 ? prev - 1 : filteredSuggestions.length - 1,
+        );
+        break;
+      case 'Enter':
+        e.preventDefault();
+        if (selectedSuggestionIndex >= 0) {
+          addPropertyFromSuggestion(filteredSuggestions[selectedSuggestionIndex]);
+        } else if (propertyInput.trim()) {
+          addNewProperty(propertyInput.trim());
+        }
+        break;
+      case 'Escape':
+        setShowSuggestions(false);
+        setSelectedSuggestionIndex(-1);
+        break;
     }
   };
 
-  const removePropriete = (index: number) => {
+  const addPropertyFromSuggestion = (property: Property) => {
+    if (!formData.proprietes.includes(property.name)) {
+      setFormData({
+        ...formData,
+        proprietes: [...formData.proprietes, property.name],
+      });
+    }
+    setPropertyInput('');
+    setShowSuggestions(false);
+    setSelectedSuggestionIndex(-1);
+  };
+
+  const addNewProperty = async (propertyName: string) => {
+    if (!formData.proprietes.includes(propertyName)) {
+      // Ajouter à la liste locale
+      setFormData({
+        ...formData,
+        proprietes: [...formData.proprietes, propertyName],
+      });
+
+      // Créer la propriété dans la base si elle n'existe pas
+      try {
+        await fetch('/api/properties', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: propertyName,
+            category: 'custom',
+            description: `Propriété créée automatiquement: ${propertyName}`,
+          }),
+        });
+        // Recharger les propriétés disponibles
+        fetchExistingProperties();
+      } catch (error) {
+        console.warn('Erreur création propriété:', error);
+      }
+    }
+    setPropertyInput('');
+    setShowSuggestions(false);
+  };
+
+  const removeProperty = (index: number) => {
     setFormData({
       ...formData,
       proprietes: formData.proprietes.filter((_, i) => i !== index),
@@ -163,7 +254,7 @@ export default function ConceptForm({ concept, onSubmit, onCancel }: ConceptForm
                 id="id"
                 value={formData.id}
                 onChange={(e) => setFormData({ ...formData, id: e.target.value.toLowerCase() })}
-                disabled={!!concept} // Pas d'édition de l'ID
+                disabled={!!concept}
                 className={`block w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                   errors.id ? 'border-red-300' : 'border-gray-300'
                 } ${concept ? 'bg-gray-100' : ''}`}
@@ -267,43 +358,155 @@ export default function ConceptForm({ concept, onSubmit, onCancel }: ConceptForm
             />
           </div>
 
-          {/* Propriétés */}
+          {/* Propriétés avec Autocomplétion */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Propriétés</label>
-            <div className="flex space-x-2 mb-2">
-              <input
-                type="text"
-                value={newPropriete}
-                onChange={(e) => setNewPropriete(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addPropriete())}
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Ajouter une propriété"
-              />
-              <button
-                type="button"
-                onClick={addPropriete}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-              >
-                Ajouter
-              </button>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {formData.proprietes.map((prop, index) => (
-                <span
-                  key={index}
-                  className="inline-flex items-center px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm"
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Propriétés
+              <span className="text-xs text-gray-500 ml-2">
+                (Tapez pour voir les suggestions existantes)
+              </span>
+            </label>
+
+            <div className="relative">
+              <div className="flex space-x-2 mb-2">
+                <div className="flex-1 relative">
+                  <input
+                    ref={propertyInputRef}
+                    type="text"
+                    value={propertyInput}
+                    onChange={(e) => handlePropertyInputChange(e.target.value)}
+                    onKeyDown={handlePropertyInputKeyDown}
+                    onFocus={() => propertyInput && setShowSuggestions(true)}
+                    onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                    className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="liquide, rapide, lumineux..."
+                  />
+
+                  {/* Suggestions dropdown */}
+                  {showSuggestions && filteredSuggestions.length > 0 && (
+                    <div
+                      ref={suggestionsRef}
+                      className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto"
+                    >
+                      {filteredSuggestions.map((property, index) => (
+                        <div
+                          key={property.id}
+                          onClick={() => addPropertyFromSuggestion(property)}
+                          className={`px-3 py-2 cursor-pointer hover:bg-gray-100 ${
+                            index === selectedSuggestionIndex ? 'bg-blue-100' : ''
+                          }`}
+                        >
+                          <div className="flex justify-between items-center">
+                            <span className="font-medium">{property.name}</span>
+                            <div className="flex items-center space-x-2 text-xs text-gray-500">
+                              {property.category && (
+                                <span className="bg-gray-200 px-2 py-1 rounded">
+                                  {property.category}
+                                </span>
+                              )}
+                              <span>({property.usageCount} usages)</span>
+                            </div>
+                          </div>
+                          {property.description && (
+                            <p className="text-xs text-gray-600 mt-1">{property.description}</p>
+                          )}
+                        </div>
+                      ))}
+
+                      {/* Option to create new property */}
+                      {propertyInput &&
+                        !availableProperties.some(
+                          (p) => p.name.toLowerCase() === propertyInput.toLowerCase(),
+                        ) && (
+                          <div
+                            onClick={() => addNewProperty(propertyInput)}
+                            className={`px-3 py-2 cursor-pointer hover:bg-gray-100 border-t border-gray-200 ${
+                              selectedSuggestionIndex === filteredSuggestions.length
+                                ? 'bg-blue-100'
+                                : ''
+                            }`}
+                          >
+                            <div className="flex items-center text-green-600">
+                              <span className="text-sm font-medium">+ Créer "{propertyInput}"</span>
+                            </div>
+                            <p className="text-xs text-gray-500">
+                              Nouvelle propriété personnalisée
+                            </p>
+                          </div>
+                        )}
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => propertyInput.trim() && addNewProperty(propertyInput.trim())}
+                  disabled={!propertyInput.trim()}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
                 >
-                  {prop}
-                  <button
-                    type="button"
-                    onClick={() => removePropriete(index)}
-                    className="ml-2 text-blue-600 hover:text-blue-800"
-                  >
-                    ×
-                  </button>
-                </span>
-              ))}
+                  Ajouter
+                </button>
+              </div>
             </div>
+
+            {/* Selected Properties */}
+            <div className="flex flex-wrap gap-2">
+              {formData.proprietes.map((prop, index) => {
+                const existingProp = availableProperties.find((p) => p.name === prop);
+                return (
+                  <span
+                    key={index}
+                    className={`inline-flex items-center px-3 py-1 rounded-full text-sm ${
+                      existingProp ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'
+                    }`}
+                    title={
+                      existingProp
+                        ? `Utilisée ${existingProp.usageCount} fois`
+                        : 'Nouvelle propriété'
+                    }
+                  >
+                    {prop}
+                    {!existingProp && <span className="ml-1 text-xs">✨</span>}
+                    <button
+                      type="button"
+                      onClick={() => removeProperty(index)}
+                      className={`ml-2 hover:text-red-600 ${
+                        existingProp ? 'text-blue-600' : 'text-green-600'
+                      }`}
+                    >
+                      ×
+                    </button>
+                  </span>
+                );
+              })}
+            </div>
+
+            {/* Property stats */}
+            {formData.proprietes.length > 0 && (
+              <div className="mt-2 text-xs text-gray-500">
+                {formData.proprietes.length} propriété{formData.proprietes.length > 1 ? 's' : ''} •
+                {
+                  formData.proprietes.filter((p) => availableProperties.some((ap) => ap.name === p))
+                    .length
+                }{' '}
+                existante
+                {formData.proprietes.filter((p) => availableProperties.some((ap) => ap.name === p))
+                  .length > 1
+                  ? 's'
+                  : ''}{' '}
+                •
+                {
+                  formData.proprietes.filter(
+                    (p) => !availableProperties.some((ap) => ap.name === p),
+                  ).length
+                }{' '}
+                nouvelle
+                {formData.proprietes.filter((p) => !availableProperties.some((ap) => ap.name === p))
+                  .length > 1
+                  ? 's'
+                  : ''}
+              </div>
+            )}
           </div>
 
           {/* Exemples */}
