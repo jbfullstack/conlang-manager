@@ -1,15 +1,6 @@
 import { useState, useEffect } from 'react';
-
-interface Concept {
-  id: string;
-  mot: string;
-  definition: string;
-  type: string;
-  proprietes: string[];
-  etymologie?: string;
-  exemples: string[];
-  usageFrequency: number;
-}
+import { Property } from '@/app/interfaces/property.interface';
+import { Concept } from '@/app/interfaces/concept.interface';
 
 interface ConceptFormProps {
   concept: Concept | null; // null = création, objet = édition
@@ -32,7 +23,8 @@ export default function ConceptForm({ concept, onSubmit, onCancel }: ConceptForm
   const [newPropriete, setNewPropriete] = useState('');
   const [newExemple, setNewExemple] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [availableProperties, setAvailableProperties] = useState<string[]>([]);
+  const [availableProperties, setAvailableProperties] = useState<Property[]>([]);
+
   const [propertyInput, setPropertyInput] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);
 
@@ -41,21 +33,21 @@ export default function ConceptForm({ concept, onSubmit, onCancel }: ConceptForm
   }, []);
 
   const fetchExistingProperties = async () => {
-    console.log('🔍 CALL fetchExistingProperties'); // ← Ajoutez ceci temporairement
     try {
       const response = await fetch('/api/properties');
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
       const data = await response.json();
       setAvailableProperties(data.properties || []);
     } catch (error) {
-      setAvailableProperties(['liquide', 'solide', 'rapide', 'lumineux']);
+      // setAvailableProperties(['liquide', 'solide', 'rapide', 'lumineux']);
+      console.error(`ConceptForm.fetchExistingProperties - ${error}`);
     }
   };
 
   const filteredSuggestions = availableProperties.filter(
     (prop) =>
-      prop.toLowerCase().includes(propertyInput.toLowerCase()) &&
-      !formData.proprietes.includes(prop),
+      prop.name.toLowerCase().includes(propertyInput.toLowerCase()) &&
+      !formData.proprietes.includes(prop.name),
   );
 
   // Charger les données du concept à éditer

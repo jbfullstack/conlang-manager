@@ -1,49 +1,58 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    console.log('🔍 DEBUG: Récupération des propriétés...'); // Debug
-    
-    // Récupérer tous les concepts
-    const concepts = await prisma.concept.findMany({
+    const { searchParams } = new URL(request.url);
+    const search = searchParams.get('search');
+    const category = searchParams.get('category');
+    const limit = parseInt(searchParams.get('limit') || '100');
+
+    let where: any = { isActive: true };
+
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } }
+      ];
+    }
+
+    if (category && category !== 'all') {
+      where.category = category;
+    }
+
+    // JUSTE les propriétés, pas les concepts !
+    const properties = await prisma.property.findMany({
+      where,
+      orderBy: [
+        { usageCount: 'desc' },
+        { name: 'asc' }
+      ],
+      take: limit
+    });
+
+    // Aussi récupérer les catégories uniques pour le frontend
+    const categories = await prisma.property.findMany({
       where: { isActive: true },
-      select: { proprietes: true }
+      select: { category: true },
+      distinct: ['category']
     });
-    
-    console.log('🔍 DEBUG: Concepts trouvés:', concepts.length); // Debug
-    
-    // Extraire toutes les propriétés uniques
-    const allProperties = new Set<string>();
-    concepts.forEach((concept: { proprietes: string; }) => {
-      if (concept.proprietes) {
-        try {
-          const props = JSON.parse(concept.proprietes) as string[];
-          props.forEach(prop => {
-            if (prop && prop.trim()) {
-              allProperties.add(prop.trim().toLowerCase());
-            }
-          });
-        } catch (e) {
-          console.warn('Erreur parsing propriétés:', concept.proprietes);
-        }
-      }
-    });
-    
-    // Convertir en tableau et trier
-    const sortedProperties = Array.from(allProperties).sort();
-    
-    console.log('✅ DEBUG: Propriétés extraites:', sortedProperties); // Debug
-    
-    return NextResponse.json({
-      properties: sortedProperties
+
+    const uniqueCategories = categories
+      .map(p => p.category)
+      .filter(Boolean)
+      .sort();
+
+    return NextResponse.json({ 
+      properties,
+      categories: uniqueCategories
     });
   } catch (error) {
-    console.error('❌ Erreur GET properties:', error);
+    console.error('Erreur GET properties:', error);
     return NextResponse.json(
-      { error: 'Erreur serveur', details: error instanceof Error ? error.message : 'Unknown error' }, 
+      { error: 'Erreur serveur' },
       { status: 500 }
     );
   }

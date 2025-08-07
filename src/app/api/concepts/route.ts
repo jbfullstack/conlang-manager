@@ -12,11 +12,21 @@ export async function GET(request: NextRequest) {
 
     let where: any = { isActive: true };
 
-    // Recherche par texte
+    // Recherche par texte (maintenant inclut aussi les propriétés)
     if (search) {
       where.OR = [
         { mot: { contains: search, mode: 'insensitive' } },
-        { definition: { contains: search, mode: 'insensitive' } }
+        { definition: { contains: search, mode: 'insensitive' } },
+        // Recherche dans les propriétés liées
+        {
+          conceptProperties: {
+            some: {
+              property: {
+                name: { contains: search, mode: 'insensitive' }
+              }
+            }
+          }
+        }
       ];
     }
 
@@ -30,6 +40,18 @@ export async function GET(request: NextRequest) {
       include: {
         user: {
           select: { username: true }
+        },
+        conceptProperties: {
+          include: {
+            property: {
+              select: {
+                id: true,
+                name: true,
+                description: true,
+                category: true
+              }
+            }
+          }
         }
       },
       orderBy: [
@@ -40,10 +62,15 @@ export async function GET(request: NextRequest) {
     });
 
     return NextResponse.json({ 
-      concepts: concepts.map((c: { proprietes: string; exemples: string; }) => ({
+      concepts: concepts.map(c => ({
         ...c,
-        proprietes: c.proprietes ? JSON.parse(c.proprietes) : [],
-        exemples: c.exemples ? JSON.parse(c.exemples) : []
+        // Transformer les propriétés liées en array simple pour la compatibilité frontend
+        proprietes: c.conceptProperties.map(cp => cp.property.name),
+        // Garder aussi les propriétés complètes si besoin d'infos détaillées
+        propertiesDetails: c.conceptProperties.map(cp => cp.property),
+        exemples: c.exemples ? JSON.parse(c.exemples) : [],
+        // Nettoyer la réponse
+        conceptProperties: undefined
       }))
     });
   } catch (error) {
@@ -85,30 +112,66 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Traiter les propriétés - créer celles qui n'existent pas
+    let propertyIds: string[] = [];
+    
+    if (proprietes && Array.isArray(proprietes)) {
+      for (const propName of proprietes) {
+        // Chercher si la propriété existe déjà
+        let property = await prisma.property.findUnique({
+          where: { name: propName }
+        });
+        
+        // Si elle n'existe pas, la créer
+        if (!property) {
+          property = await prisma.property.create({
+            data: {
+              name: propName,
+              category: 'divers' // Catégorie par défaut
+            }
+          });
+        }
+        
+        propertyIds.push(property.id);
+      }
+    }
+
     const concept = await prisma.concept.create({
       data: {
         id,
         mot,
         definition,
         type,
-        proprietes: JSON.stringify(proprietes || []),
         etymologie,
         exemples: JSON.stringify(exemples || []),
-        // Note: createdBy should come from auth, but for now we'll use first user
-        createdBy: (await prisma.user.findFirst())?.id
+        createdBy: (await prisma.user.findFirst())?.id,
+        conceptProperties: {
+          create: propertyIds.map(propertyId => ({
+            propertyId
+          }))
+        }
       },
       include: {
         user: {
           select: { username: true }
+        },
+        conceptProperties: {
+          include: {
+            property: true
+          }
         }
       }
     });
 
+    // Mettre à jour les compteurs d'usage des propriétés
+    await updatePropertyUsageCounts(propertyIds);
+
     return NextResponse.json({ 
       concept: {
         ...concept,
-        proprietes: JSON.parse(concept.proprietes || '[]'),
-        exemples: JSON.parse(concept.exemples || '[]')
+        proprietes: concept.conceptProperties.map(cp => cp.property.name),
+        exemples: JSON.parse(concept.exemples || '[]'),
+        conceptProperties: undefined
       }
     }, { status: 201 });
   } catch (error) {
@@ -117,5 +180,19 @@ export async function POST(request: NextRequest) {
       { error: 'Erreur serveur' }, 
       { status: 500 }
     );
+  }
+}
+
+// Fonction utilitaire pour mettre à jour les compteurs d'usage
+async function updatePropertyUsageCounts(propertyIds: string[]) {
+  for (const propertyId of propertyIds) {
+    const usageCount = await prisma.conceptProperty.count({
+      where: { propertyId }
+    });
+    
+    await prisma.property.update({
+      where: { id: propertyId },
+      data: { usageCount }
+    });
   }
 }
