@@ -5,6 +5,22 @@ import parseLLMJson, { buildLLMPromptRequest } from '@/lib/llm-utils';
 
 const prisma = new PrismaClient();
 
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(new Error('timeout'));
+      }, ms);
+
+    p.then((v) => {
+      clearTimeout(timer);
+      resolve(v);
+    }).catch((e) => {
+      clearTimeout(timer);
+      reject(e);
+    });
+  });
+}
+
 export async function POST(request: NextRequest) {
   try {
     const { conceptIds } = await request.json();
@@ -44,45 +60,59 @@ export async function POST(request: NextRequest) {
     console.log('🔍 concepts transformés:', concepts);
     
     const prompt = `
-Tu es un linguiste expert en langue construite par composition de concepts primitifs.
+    Tu es un linguiste expert en langue construite par composition de concepts primitifs.
 
-CONCEPTS SÉLECTIONNÉS (IDs et labels):
-${concepts.map(c => `- ${c.id} : ${c.mot} (${c.type})`).join('\n')}
+    CONCEPTS SÉLECTIONNÉS (IDs et labels):
+    ${concepts.map(c => `- ${c.id} : ${c.mot} (${c.type})`).join('\n')}
 
-OBJECTIF: produire la meilleure composition reliant ces concepts pour exprimer un sens donné.
+    OBJECTIF: produire la meilleure composition reliant ces concepts pour exprimer un sens donné.
 
-CONVENTIONS:
-- Pattern attendu: ["id1","id2",...]
-- Structure du sens: décrit par un champ "sens" et une justification
-- Si des règles algorithmiques simples permettent le résultat directement, privilégier l’algorithme; sinon déléguer à l’LLM
-- RÉSULTAT EN JSON UNIQUEMENT avec les champs:
-  {
-    "sens": "texte du sens dégagé",
-    "confidence": 0.0,
-    "justification": "raisonnement",
-    "examples": ["exemple d’usage"],
-    "alternatives": [
-      {"sens": "sens alternatif", "confidence": 0.0}
-    ],
-    "source": "algorithmic" | "llm"
-  }
+    CONVENTIONS:
+    - Pattern attendu: ["id1","id2",...]
+    - Structure du sens: décrit par un champ "sens" et une justification
+    - Si des règles algorithmiques simples permettent le résultat directement, privilégier l’algorithme; sinon déléguer à l’LLM
+    - RÉSULTAT EN JSON UNIQUEMENT avec les champs:
+      {
+        "sens": "texte du sens dégagé",
+        "confidence": 0.0,
+        "justification": "raisonnement",
+        "examples": ["exemple d’usage"],
+        "alternatives": [
+          {"sens": "sens alternatif", "confidence": 0.0}
+        ],
+        "source": "algorithmic" | "llm"
+      }
 
-TÂCHE: retourne le JSON correspondant à la composition déterminée par les concepts fournis. Si une règle spécifique existe (par ex. go + tomu = torrent), applique-la et renseigne le champ source = "algorithmic".
-RÉPONSE EN JSON UNIQUEMENT
-`;
+    TÂCHE: retourne le JSON correspondant à la composition déterminée par les concepts fournis. Si une règle spécifique existe (par ex. go + tomu = torrent), applique-la et renseigne le champ source = "algorithmic".
+    RÉPONSE EN JSON UNIQUEMENT
+    `;
 
     console.log('compost POST prompt :', prompt);
 
-    const response = await openai.chat.completions.create(buildLLMPromptRequest(prompt, 0.3, 500));
+    const response = await withTimeout(
+      openai.chat.completions.create(buildLLMPromptRequest(prompt, 0.3, 500)),
+      20000 // 20s timeout
+    );
 
-        const raw = response.choices?.[0]?.message?.content ?? '{}';
-        const result = parseLLMJson(raw);
+    const raw = response.choices?.[0]?.message?.content ?? '{}';
+    const result = parseLLMJson(raw);
 
     console.log('compost POST result :', result);
-    return NextResponse.json({ ...result, source: 'llm' });
+    return  NextResponse.json({ error: 'Erreur d’analyse', ... }, { status: 200 });
     
   } catch (error: any) {
     console.error('Erreur compose:', error);
+
+    // Timeout spécifique
+    if (error?.message === 'timeout') {
+      return NextResponse.json({
+        sens: "Limite de temps IA",
+        confidence: 0,
+        justification: "L'appel IA n'a pas répondu dans les délais.",
+        source: 'error',
+        error_type: 'timeout'
+      }, { status: 200 });
+    }
     
     // GESTION SPÉCIFIQUE DES ERREURS OPENAI
     if (error?.status === 429) {
@@ -127,32 +157,32 @@ RÉPONSE EN JSON UNIQUEMENT
 }
 
 // RÈGLES ALGORITHMIQUES
-function applyCompositionRules(concepts: any[]) {
-  const elements = concepts.filter(c => c.type === 'element');
-  const actions = concepts.filter(c => c.type === 'action');
+// function applyCompositionRules(concepts: any[]) {
+//   const elements = concepts.filter(c => c.type === 'element');
+//   const actions = concepts.filter(c => c.type === 'action');
   
-  if (elements.length === 1 && actions.length === 1) {
-    const element = elements[0];
-    const action = actions[0];
+//   if (elements.length === 1 && actions.length === 1) {
+//     const element = elements[0];
+//     const action = actions[0];
     
-    // Cas spéciaux
-    if (element.mot === 'go' && action.mot === 'tomu') {
-      return {
-        sens: 'torrent/cascade',
-        confidence: 0.9,
-        justification: 'Combinaison validée: eau + mouvement rapide = flux naturel',
-        source: 'algorithmic',
-        examples: ['Le torrent dévale la montagne']
-      };
-    }
+//     // Cas spéciaux
+//     if (element.mot === 'go' && action.mot === 'tomu') {
+//       return {
+//         sens: 'torrent/cascade',
+//         confidence: 0.9,
+//         justification: 'Combinaison validée: eau + mouvement rapide = flux naturel',
+//         source: 'algorithmic',
+//         examples: ['Le torrent dévale la montagne']
+//       };
+//     }
     
-    return {
-      sens: `${element.concept} ${action.concept}`,
-      confidence: 0.6,
-      justification: `Règle: élément + action = processus`,
-      source: 'algorithmic'
-    };
-  }
+//     return {
+//       sens: `${element.concept} ${action.concept}`,
+//       confidence: 0.6,
+//       justification: `Règle: élément + action = processus`,
+//       source: 'algorithmic'
+//     };
+//   }
   
-  return null;
-}
+//   return null;
+// }

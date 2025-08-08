@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { openai } from '@/lib/openai';
 import { PrismaClient } from '@prisma/client';
+import { openai } from '@/lib/openai';
 import parseLLMJson, { buildLLMPromptRequest } from '@/lib/llm-utils';
 
 const prisma = new PrismaClient();
@@ -8,42 +8,48 @@ const prisma = new PrismaClient();
 export async function POST(request: NextRequest) {
   try {
     const { frenchInput } = await request.json();
-    
-    // Récupérer tous les concepts
+
+    // Récupérer tous les concepts actifs
     const concepts = await prisma.concept.findMany({
       where: { isActive: true },
       include: {
         conceptProperties: {
-          include: {
-            property: true
-          }
+          include: { property: true }
         }
       }
     });
 
+    // Prompt optimisé: liste des primitives avec leurs propriétés utilisées (limitées)
     const prompt = `
 Tu es un linguiste expert en langue construite basée sur des concepts primitifs.
-
-RAPPORT: produire uniquement du JSON (strict) décrivant une ou plusieurs combinaisons possibles.
 
 CONCEPT FRANÇAIS À EXPÉDUIR: "${frenchInput}"
 
 PRIMITIFS DISPONIBLES (liste succincte, ne pas réécrire tout le détail) :
-${concepts.map(c => `- ${c.id}: ${c.mot} (${c.type})`).join('\n')}
+${concepts
+  .map((c) => {
+    const props = (c.conceptProperties ?? [])
+      .map((cp: any) => cp.property?.name)
+      .filter(Boolean)
+      .join(', ');
+    return `- "${c.mot}" = ${c.definition} (type: ${c.type}${props ? `, propriétés: ${props}` : ''})`;
+  })
+  .join('\n')}
 
-TÂCHE: proposer la meilleure composition (1 sens principal) qui exprime le concept français donné, en utilisant les primitives disponibles.
+Tâche: proposer la meilleure composition (1 sens principal) qui exprime le concept français donné, en utilisant les primitives disponibles.
 
-FORMAT DE RÉPONSE (JSON STRICT, uniquement ces champs):
+FORMAT DE RÉPONSE (JSON STRICT, UNIQUEMENT):
 {
-  "sens": "texte décrivant le sens principal",
+  "sens": "sens principal",
   "confidence": 0.0,
-  "justification": "raisonnement succinct décrivant pourquoi ce sens est approprié",
-  "examples": ["exemple d'usage 1", "exemple d'usage 2"],
-  "pattern": ["concept_id_1","concept_id_2",...], // ordre correspond à la composition
-  "missing_concepts": ["nom_prochain_concept_si_manquant"], // optionnel
-  "proposed_new_primitives": [
-    {"name": "nom_primaire", "definition": "définition courte", "type": "element | action | ...", "rationale": "pourquoi ajouter"}
+  "justification": "raisonnement logique",
+  "examples": ["exemple d'usage 1"],
+  "alternatives": [
+    {"sens": "sens alternatif 1", "confidence": 0.0},
+    {"sens": "sens alternatif 2", "confidence": 0.0}
   ],
+  "missing_concepts": ["nom_prochain_concept_si_manquant"],
+  "pattern": ["concept_id_1","concept_id_2",...],
   "source": "llm"
 }
 RÉPONSE EN JSON UNIQUEMENT
@@ -52,23 +58,21 @@ RÉPONSE EN JSON UNIQUEMENT
     const response = await openai.chat.completions.create(buildLLMPromptRequest(prompt));
     const raw = response.choices?.[0]?.message?.content ?? '{}';
     const result = parseLLMJson(raw);
+
+    // Enrichir pattern avec les noms des primitives (UX)
     let patternMot: string[] = [];
     try {
-        // Construis un map id -> mot à partir des concepts récupérés
-        const idToMot: Record<string, string> = {};
-        concepts.forEach((c: any) => {
-            if (c?.id && c?.mot) idToMot[c.id] = c.mot;
-        });
-        const pattern = (result as any).pattern ?? [];
-        patternMot = pattern.map((id: string) => idToMot[id] ?? id);
+      const idToMot: Record<string, string> = {};
+      concepts.forEach((c: any) => {
+        if (c?.id && c?.mot) idToMot[c.id] = c.mot;
+      });
+      const pat = (result as any).pattern ?? [];
+      patternMot = pat.map((id: string) => idToMot[id] ?? id);
     } catch {
-        // en cas d'erreur, on garde empty
-        patternMot = [];
+      patternMot = [];
     }
 
-    // Fusionne pour le client: on garde pattern et patternMot
-    return NextResponse.json({ ...(result as any), patternMot, pattern: (result as any).pattern ?? [], source: 'llm' });
-    
+    return NextResponse.json({ ...result, patternMot, source: 'llm' });
   } catch (error) {
     console.error('Erreur search-reverse:', error);
     return NextResponse.json({ error: 'Erreur lors de la recherche' }, { status: 500 });

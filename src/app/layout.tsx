@@ -24,6 +24,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   <a href="/dashboard" className="text-gray-600 hover:text-gray-900">
                     Dashboard
                   </a>
+                  <a href="/dictionary" className="text-gray-600 hover:text-gray-900">
+                    Dictionary
+                  </a>
                   <a href="/concepts" className="text-gray-600 hover:text-gray-900">
                     Concepts
                   </a>
