@@ -115,10 +115,10 @@ export function transformConceptsForUI(concepts: any[]) {
   return concepts.map(concept => ({
     id: concept.id,
     mot: concept.mot,
-    concept: concept.definition, // Votre "definition" = mon "concept"
+    definition: concept.definition, 
     type: concept.type,
     proprietes: concept.conceptProperties.map((cp: any) => cp.property.name),
-    couleur: getColorByType(concept.type) // À adapter selon vos types
+    couleur: getColorByType(concept.type)
   }));
 }
 

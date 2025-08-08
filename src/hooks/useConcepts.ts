@@ -15,7 +15,7 @@ export function useConcepts() {
         const mapped = list.map((c: any) => ({
           id: c.id,
           mot: c.mot,
-          concept: c.definition ?? '',
+          definition: c.definition ?? '',
           type: c.type,
           proprietes: c.conceptProperties?.map((cp: any) => cp.property?.name) ?? [],
           couleur: '#64748b',

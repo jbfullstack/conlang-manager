@@ -178,6 +178,7 @@ export default function CompositionPage() {
       pattern,
       sens: `composition manuelle: ${compositionChips}`,
       description: manualDescription,
+      examples: manualExamples, // Envoi du tableau d'exemples
       statut: 'PROPOSITION',
       source: 'MANUAL',
       confidenceScore: 0,
@@ -219,139 +220,164 @@ export default function CompositionPage() {
   );
 
   return (
-    <div className="max-w-7xl mx-auto p-6 space-y-6">
-      {/* HEADER avec TABS */}
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center">
-            🧬 Atelier de Composition
-          </h1>
-          <div className="flex items-center space-x-4 text-sm text-gray-600">
-            <div className="flex items-center">🧠 {concepts.length} concepts</div>
-            <div className="flex items-center">📚 {communityComps.length} compositions</div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50">
+      <div className="max-w-7xl mx-auto p-3 sm:p-6 space-y-4 sm:space-y-6">
+        {/* HEADER avec TABS */}
+        <div className="bg-white/80 backdrop-blur-sm rounded-xl sm:rounded-2xl shadow-xl border border-white/20 p-4 sm:p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 space-y-3 sm:space-y-0">
+            <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent flex items-center">
+              <span className="mr-2 text-2xl sm:text-3xl">🧬</span>
+              Atelier de Composition
+            </h1>
+            <div className="flex items-center space-x-2 sm:space-x-4 text-xs sm:text-sm text-gray-600">
+              <div className="flex items-center bg-blue-50 px-2 sm:px-3 py-1 rounded-full">
+                <span className="mr-1">🧠</span>
+                <span className="font-medium">{concepts.length}</span>
+                <span className="hidden sm:inline ml-1">concepts</span>
+              </div>
+              <div className="flex items-center bg-purple-50 px-2 sm:px-3 py-1 rounded-full">
+                <span className="mr-1">📚</span>
+                <span className="font-medium">{communityComps.length}</span>
+                <span className="hidden sm:inline ml-1">compositions</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center space-y-2 sm:space-y-0 sm:space-x-2 lg:space-x-4 mb-4">
+            <button
+              onClick={() => setMode('manual')}
+              className={`px-3 sm:px-4 py-2 sm:py-3 rounded-lg sm:rounded-xl flex items-center justify-center sm:justify-start space-x-2 font-medium transition-all transform hover:scale-105 ${
+                mode === 'manual'
+                  ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg'
+                  : 'bg-white text-gray-700 border-2 border-gray-200 hover:border-blue-300 hover:bg-blue-50'
+              }`}
+            >
+              <span className="text-lg">✋</span>
+              <span className="text-sm sm:text-base">Manuel</span>
+            </button>
+            <button
+              onClick={() => setMode('ai-search')}
+              className={`px-3 sm:px-4 py-2 sm:py-3 rounded-lg sm:rounded-xl flex items-center justify-center sm:justify-start space-x-2 font-medium transition-all transform hover:scale-105 ${
+                mode === 'ai-search'
+                  ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white shadow-lg'
+                  : 'bg-white text-gray-700 border-2 border-gray-200 hover:border-purple-300 hover:bg-purple-50'
+              }`}
+            >
+              <span className="text-lg">🔍</span>
+              <span className="text-sm sm:text-base">Recherche IA</span>
+            </button>
+            <button
+              onClick={() => setMode('ai-analyze')}
+              className={`px-3 sm:px-4 py-2 sm:py-3 rounded-lg sm:rounded-xl flex items-center justify-center sm:justify-start space-x-2 font-medium transition-all transform hover:scale-105 ${
+                mode === 'ai-analyze'
+                  ? 'bg-gradient-to-r from-green-500 to-green-600 text-white shadow-lg'
+                  : 'bg-white text-gray-700 border-2 border-gray-200 hover:border-green-300 hover:bg-green-50'
+              }`}
+            >
+              <span className="text-lg">🔬</span>
+              <span className="text-sm sm:text-base">Analyse IA</span>
+            </button>
+          </div>
+
+          <div className="p-3 sm:p-4 bg-gradient-to-r from-gray-50 to-blue-50 rounded-lg sm:rounded-xl border border-gray-200">
+            <p className="text-gray-600 text-sm sm:text-base text-center sm:text-left">
+              {mode === 'manual' &&
+                '✨ Sélectionnez des concepts pour créer une composition personnalisée'}
+              {mode === 'ai-search' &&
+                '🚀 Décrivez un concept en français pour trouver sa composition'}
+              {mode === 'ai-analyze' &&
+                '🔬 Sélectionnez des concepts puis analysez leur composition'}
+            </p>
           </div>
         </div>
 
-        <div className="flex items-center space-x-4 mb-4">
-          <button
-            onClick={() => setMode('manual')}
-            className={`px-4 py-2 rounded-lg flex items-center space-x-2 ${
-              mode === 'manual' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-700'
-            }`}
-          >
-            <span>✋</span>
-            <span>Composition Manuelle</span>
-          </button>
-          <button
-            onClick={() => setMode('ai-search')}
-            className={`px-4 py-2 rounded-lg flex items-center space-x-2 ${
-              mode === 'ai-search' ? 'bg-purple-500 text-white' : 'bg-gray-100 text-gray-700'
-            }`}
-          >
-            <span>🔍</span>
-            <span>Recherche IA</span>
-          </button>
-          <button
-            onClick={() => setMode('ai-analyze')}
-            className={`px-4 py-2 rounded-lg flex items-center space-x-2 ${
-              mode === 'ai-analyze' ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-700'
-            }`}
-          >
-            <span>🔬</span>
-            <span>Analyse IA</span>
-          </button>
-        </div>
+        {/* LAYOUT PRINCIPAL */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
+          {/* COLONNE 1: Concepts disponibles */}
+          <div className="lg:col-span-1 order-2 lg:order-1">
+            <ConceptsAvailable concepts={concepts} onSelect={toggleConceptInManual} pageSize={6} />
+          </div>
 
-        <p className="text-gray-600">
-          {mode === 'manual' && 'Sélectionnez des concepts pour créer une composition'}
-          {mode === 'ai-search' && 'Décrivez un concept en français pour trouver sa composition'}
-          {mode === 'ai-analyze' && 'Sélectionnez des concepts puis analysez la composition'}
-        </p>
-      </div>
+          {/* COLONNE 2: Panneaux actifs + Résultat IA */}
+          <div className="lg:col-span-2 space-y-4 lg:space-y-6 order-1 lg:order-2">
+            {/* Panneau actif selon le mode */}
+            <div>
+              {mode === 'manual' && (
+                <ManualComposer
+                  concepts={concepts}
+                  selectedConcepts={selectedConcepts}
+                  onToggleConcept={toggleConceptInManual}
+                  compositionChips={compositionChips}
+                  manualDescription={manualDescription}
+                  setManualDescription={setManualDescription}
+                  manualExamples={manualExamples}
+                  setManualExamples={setManualExamples}
+                  onCreateManual={createManualComposition}
+                  onReset={() => {
+                    setSelectedConcepts([]);
+                    setManualDescription('');
+                    setManualExamples([]);
+                  }}
+                />
+              )}
+              {mode === 'ai-search' && (
+                <AIReversePanel
+                  input={aiReverseInput}
+                  onInputChange={setAiReverseInput}
+                  onSearch={handleAISearch}
+                  loading={aiLoading}
+                />
+              )}
+              {mode === 'ai-analyze' && (
+                <AIAnalyzePanel
+                  selectedConcepts={selectedConcepts}
+                  compositionChips={compositionChips}
+                  onAnalyzeFromSelection={handleAnalyzeFromSelection}
+                  loading={aiLoading}
+                />
+              )}
+            </div>
 
-      {/* LAYOUT PRINCIPAL */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* COLONNE 1: Concepts disponibles */}
-        <div className="lg:col-span-1">
-          <ConceptsAvailable concepts={concepts} onSelect={toggleConceptInManual} />
-        </div>
-
-        {/* COLONNE 2: Panneaux actifs + Résultat IA */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Panneau actif selon le mode */}
-          <div>
-            {mode === 'manual' && (
-              <ManualComposer
-                concepts={concepts}
-                selectedConcepts={selectedConcepts}
-                onToggleConcept={toggleConceptInManual}
-                compositionChips={compositionChips}
-                manualDescription={manualDescription}
-                setManualDescription={setManualDescription}
-                manualExamples={manualExamples}
-                setManualExamples={setManualExamples}
-                onCreateManual={createManualComposition}
-                onReset={() => {
-                  setSelectedConcepts([]);
-                  setManualDescription('');
-                  setManualExamples([]);
-                }}
-              />
-            )}
-            {mode === 'ai-search' && (
-              <AIReversePanel
-                input={aiReverseInput}
-                onInputChange={setAiReverseInput}
-                onSearch={handleAISearch}
-                loading={aiLoading}
-              />
-            )}
-            {mode === 'ai-analyze' && (
-              <AIAnalyzePanel
-                selectedConcepts={selectedConcepts}
-                compositionChips={compositionChips}
-                onAnalyzeFromSelection={handleAnalyzeFromSelection}
-                loading={aiLoading}
+            {/* Résultat IA - maintenant dans la même colonne */}
+            {compositionResult && (
+              <CompositionResultPanel
+                compositionResult={compositionResult}
+                onClose={() => setCompositionResult(null)}
+                onSave={openSaveModal}
               />
             )}
           </div>
+        </div>
 
-          {/* Résultat IA - maintenant dans la même colonne */}
-          {compositionResult && (
-            <CompositionResultPanel
-              compositionResult={compositionResult}
-              onClose={() => setCompositionResult(null)}
-              onSave={openSaveModal}
+        {/* COMPOSITIONS RÉCENTES - en bas */}
+        <div className="order-3">
+          {compsLoading ? (
+            <div className="bg-white/80 backdrop-blur-sm rounded-xl sm:rounded-2xl shadow-lg p-6 sm:p-8 text-center">
+              <div className="animate-spin h-8 w-8 border-3 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+              <p className="text-gray-600">Chargement des compositions...</p>
+            </div>
+          ) : (
+            <CompositionsRecent
+              comps={communityComps}
+              concepts={concepts}
+              onUsePattern={handleUsePatternFromComp}
             />
           )}
         </div>
-      </div>
 
-      {/* COMPOSITIONS RÉCENTES - en bas */}
-      <div>
-        {compsLoading ? (
-          <div>Chargement des compositions...</div>
-        ) : (
-          <CompositionsRecent
-            comps={communityComps}
-            concepts={concepts}
-            onUsePattern={handleUsePatternFromComp}
+        {/* Modal Sauvegarde */}
+        {showSaveModal && (
+          <SaveModal
+            isOpen={showSaveModal}
+            onClose={() => setShowSaveModal(false)}
+            onSave={handleSaveComposition}
+            selectedConcepts={selectedConcepts}
+            compositionResult={compositionResult}
+            saveFormData={saveFormData}
+            setSaveFormData={setSaveFormData}
           />
         )}
       </div>
-
-      {/* Modal Sauvegarde */}
-      {showSaveModal && (
-        <SaveModal
-          isOpen={showSaveModal}
-          onClose={() => setShowSaveModal(false)}
-          onSave={handleSaveComposition}
-          selectedConcepts={selectedConcepts}
-          compositionResult={compositionResult}
-          saveFormData={saveFormData}
-          setSaveFormData={setSaveFormData}
-        />
-      )}
     </div>
   );
 }
