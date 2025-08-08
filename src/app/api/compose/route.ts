@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
     const result = parseLLMJson(raw);
 
     console.log('compost POST result :', result);
-    return  NextResponse.json({ error: 'Erreur d’analyse', ... }, { status: 200 });
+    return NextResponse.json({ ...result, source: 'llm' });
     
   } catch (error: any) {
     console.error('Erreur compose:', error);
