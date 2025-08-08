@@ -1,11 +1,23 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import ConceptCard from '../components/features/concepts/ConceptCard';
-import ConceptForm from '../components/features/concepts/ConceptForm';
-import ConceptSearchAndFilter from '../components/features/concepts/ConceptSearchAndFilter';
-import Pagination from '../components/ui/Pagination';
+import { useState, useEffect, useCallback } from 'react';
+import ConceptCard from '@/app/components/features/concepts/ConceptCard';
+import ConceptForm from '@/app/components/features/concepts/ConceptForm';
+import ConceptSearchAndFilter from '@/app/components/features/concepts/ConceptSearchAndFilter';
+import Pagination from '@/app/components/ui/Pagination';
 import { usePagination } from '@/hooks/usePagination';
+
+// Composants réutilisables
+import PageLayout from '@/app/components/ui/PageLayout';
+import PageHeader from '@/app/components/ui/PageHeader';
+import ContentSection from '@/app/components/ui/ContentSection';
+import AnimatedGrid from '@/app/components/ui/AnimatedGrid';
+import {
+  LoadingScreen,
+  ErrorState,
+  EmptyState,
+  ContentContainer,
+} from '@/app/components/ui/LoadingStates';
 
 interface Concept {
   id: string;
@@ -37,19 +49,16 @@ export default function ConceptsPage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingConcept, setEditingConcept] = useState<Concept | null>(null);
 
-  // ✅ Utiliser le hook usePagination corrigé
   const pagination = usePagination({
     defaultPageSize: 12,
     defaultPage: 1,
   });
 
-  // Filtres de recherche
   const [searchFilters, setSearchFilters] = useState({
     searchTerm: '',
     typeFilter: 'all',
   });
 
-  // Info de pagination du serveur
   const [serverPagination, setServerPagination] = useState<PaginationInfo>({
     page: 1,
     pageSize: 12,
@@ -59,10 +68,9 @@ export default function ConceptsPage() {
     hasPrev: false,
   });
 
-  // Types pour les filtres
   const [availableTypes, setAvailableTypes] = useState<string[]>([]);
 
-  // ✅ FIX: Fonction de fetch SANS dépendance sur pagination
+  // API calls
   const fetchConcepts = useCallback(async () => {
     try {
       setLoading(true);
@@ -81,8 +89,6 @@ export default function ConceptsPage() {
       }
 
       const url = `/api/concepts?${params.toString()}`;
-      console.log('🔄 Fetching concepts from:', url);
-
       const response = await fetch(url);
 
       if (!response.ok) {
@@ -90,7 +96,6 @@ export default function ConceptsPage() {
       }
 
       const data = await response.json();
-
       setConcepts(data.concepts || []);
       setServerPagination({
         page: data.pagination.page,
@@ -101,7 +106,6 @@ export default function ConceptsPage() {
         hasPrev: data.pagination.hasPrev,
       });
     } catch (err) {
-      console.error('❌ Error fetching concepts:', err);
       setError(err instanceof Error ? err.message : 'Erreur inconnue');
       setConcepts([]);
       setServerPagination((prev) => ({ ...prev, totalCount: 0, totalPages: 0 }));
@@ -110,7 +114,6 @@ export default function ConceptsPage() {
     }
   }, [searchFilters, pagination.currentPage, pagination.pageSize]);
 
-  // Charger les types disponibles (une seule fois)
   const fetchTypes = useCallback(async () => {
     try {
       const response = await fetch('/api/concepts/types');
@@ -123,21 +126,17 @@ export default function ConceptsPage() {
     }
   }, []);
 
-  // ✅ FIX: Effet pour les types (UNE SEULE FOIS au montage)
   useEffect(() => {
     fetchTypes();
   }, []);
 
-  // ✅ FIX: Effet pour le fetch des données (SEULEMENT quand nécessaire)
   useEffect(() => {
     fetchConcepts();
   }, [fetchConcepts]);
 
-  // ✅ FIX: Handler pour la recherche
+  // Handlers
   const handleSearch = useCallback(
     (searchTerm: string, typeFilter: string) => {
-      console.log('🔍 Search triggered:', { searchTerm, typeFilter });
-
       const newFilters = { searchTerm, typeFilter };
       setSearchFilters(newFilters);
       pagination.resetPagination();
@@ -145,10 +144,8 @@ export default function ConceptsPage() {
     [pagination],
   );
 
-  // ✅ FIX: Handlers de pagination
   const handlePageChange = useCallback(
     (newPage: number) => {
-      console.log('📄 Page change to:', newPage);
       pagination.onPageChange(newPage);
     },
     [pagination],
@@ -156,13 +153,11 @@ export default function ConceptsPage() {
 
   const handlePageSizeChange = useCallback(
     (newPageSize: number) => {
-      console.log('📏 Page size change to:', newPageSize);
       pagination.onPageSizeChange(newPageSize);
     },
     [pagination],
   );
 
-  // Actions des concepts
   const handleCreateConcept = () => {
     setEditingConcept(null);
     setIsFormOpen(true);
@@ -203,9 +198,7 @@ export default function ConceptsPage() {
 
       const response = await fetch(url, {
         method,
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(conceptData),
       });
 
@@ -230,59 +223,55 @@ export default function ConceptsPage() {
   // Loading state
   if (loading && concepts.length === 0) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Chargement des concepts...</p>
-        </div>
-      </div>
+      <LoadingScreen
+        message="Chargement des concepts..."
+        subMessage="Préparation de votre bibliothèque"
+        variant="blue"
+      />
     );
   }
 
   // Error state
   if (error && concepts.length === 0) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center bg-white p-8 rounded-lg shadow">
-          <div className="text-red-600 text-4xl mb-4">⚠️</div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">Erreur</h2>
-          <p className="text-gray-600 mb-4">{error}</p>
-          <button
-            onClick={() => fetchConcepts()}
-            className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
-          >
-            Réessayer
-          </button>
-        </div>
-      </div>
-    );
+    return <ErrorState message={error} onRetry={fetchConcepts} variant="red" />;
   }
 
-  return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
-        {/* Header */}
-        <div className="mb-8">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">Concepts Primitifs</h1>
-              <p className="text-gray-600 mt-2">
-                Gérez vos concepts de base • {serverPagination.totalCount} concept
-                {serverPagination.totalCount !== 1 ? 's' : ''} au total • Page{' '}
-                {pagination.currentPage} sur {serverPagination.totalPages}
-              </p>
-            </div>
-            <button
-              onClick={handleCreateConcept}
-              className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 transition-colors flex items-center space-x-2"
-            >
-              <span>➕</span>
-              <span>Nouveau Concept</span>
-            </button>
-          </div>
-        </div>
+  // Préparer les stats pour le header
+  const headerStats = [
+    {
+      icon: '📊',
+      label: serverPagination.totalCount !== 1 ? 'concepts' : 'concept',
+      value: serverPagination.totalCount,
+      color: 'blue' as const,
+    },
+    {
+      icon: '📄',
+      label: `Page ${pagination.currentPage} / ${serverPagination.totalPages}`,
+      value: '',
+      color: 'purple' as const,
+    },
+  ];
 
-        {/* Search and Filter */}
+  return (
+    <PageLayout variant="blue">
+      {/* Header */}
+      <PageHeader
+        title="Concepts Primitifs"
+        icon="🧠"
+        titleGradient="from-blue-600 via-purple-600 to-pink-600"
+        stats={headerStats}
+        actionButton={{
+          label: 'Nouveau Concept',
+          shortLabel: 'Nouveau',
+          icon: '➕',
+          onClick: handleCreateConcept,
+          gradient:
+            'bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600',
+        }}
+      />
+
+      {/* Search and Filter */}
+      <ContentSection>
         <ConceptSearchAndFilter
           onSearch={handleSearch}
           types={availableTypes}
@@ -290,29 +279,34 @@ export default function ConceptsPage() {
           filteredCount={serverPagination.totalCount}
           loading={loading}
         />
+      </ContentSection>
 
-        {/* Concepts Grid */}
+      {/* Main Content */}
+      <ContentContainer loading={loading && concepts.length > 0} loadingMessage="Actualisation...">
+        {/* Empty state */}
         {concepts.length === 0 && !loading ? (
-          <div className="text-center py-12">
-            <div className="text-gray-400 text-6xl mb-4">🔍</div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Aucun concept trouvé</h3>
-            <p className="text-gray-600">
-              {serverPagination.totalCount === 0
-                ? 'Créez votre premier concept pour commencer'
-                : 'Essayez de modifier vos critères de recherche'}
-            </p>
-          </div>
+          <EmptyState
+            icon={serverPagination.totalCount === 0 ? '📝' : '🔍'}
+            title={
+              serverPagination.totalCount === 0 ? 'Aucun concept créé' : 'Aucun concept trouvé'
+            }
+            description={
+              serverPagination.totalCount === 0
+                ? 'Commencez par créer votre premier concept primitif pour construire votre vocabulaire'
+                : 'Essayez de modifier vos critères de recherche ou créez un nouveau concept'
+            }
+            actionButton={{
+              label: 'Créer votre premier concept',
+              onClick: handleCreateConcept,
+              gradient:
+                'bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600',
+            }}
+          />
         ) : (
           <>
-            {/* Loading overlay */}
-            <div className="relative">
-              {loading && (
-                <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-10">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {/* Concepts Grid */}
+            <div className="mb-6 sm:mb-8">
+              <AnimatedGrid columns={4} gap="md">
                 {concepts.map((concept) => (
                   <ConceptCard
                     key={concept.id}
@@ -321,33 +315,35 @@ export default function ConceptsPage() {
                     onDelete={() => handleDeleteConcept(concept.id)}
                   />
                 ))}
-              </div>
+              </AnimatedGrid>
             </div>
 
             {/* Pagination */}
             {serverPagination.totalPages > 1 && (
-              <Pagination
-                currentPage={pagination.currentPage}
-                totalPages={serverPagination.totalPages}
-                totalCount={serverPagination.totalCount}
-                pageSize={pagination.pageSize}
-                onPageChange={handlePageChange}
-                onPageSizeChange={handlePageSizeChange}
-                loading={loading}
-              />
+              <ContentSection>
+                <Pagination
+                  currentPage={pagination.currentPage}
+                  totalPages={serverPagination.totalPages}
+                  totalCount={serverPagination.totalCount}
+                  pageSize={pagination.pageSize}
+                  onPageChange={handlePageChange}
+                  onPageSizeChange={handlePageSizeChange}
+                  loading={loading}
+                />
+              </ContentSection>
             )}
           </>
         )}
+      </ContentContainer>
 
-        {/* Form Modal */}
-        {isFormOpen && (
-          <ConceptForm
-            concept={editingConcept}
-            onSubmit={handleFormSubmit}
-            onCancel={handleFormCancel}
-          />
-        )}
-      </div>
-    </div>
+      {/* Form Modal */}
+      {isFormOpen && (
+        <ConceptForm
+          concept={editingConcept}
+          onSubmit={handleFormSubmit}
+          onCancel={handleFormCancel}
+        />
+      )}
+    </PageLayout>
   );
 }

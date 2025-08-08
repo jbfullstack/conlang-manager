@@ -1,6 +1,7 @@
 'use client';
 import React, { useMemo, useState } from 'react';
 import { Concept } from '@/interfaces/concept.interface';
+import { getConceptTypeIcon } from '@/lib/concept-types-utils';
 
 type Props = {
   concepts: Concept[];
@@ -50,16 +51,16 @@ export default function ConceptsAvailable({ concepts, onSelect, pageSize = 6 }: 
     return colors[type as keyof typeof colors] || 'from-gray-400 to-gray-600';
   };
 
-  const getTypeIcon = (type: string) => {
-    const icons = {
-      element: '🧊',
-      action: '🏃‍♂️',
-      qualite: '✨',
-      relation: '🔗',
-      abstrait: '💭',
-    };
-    return icons[type as keyof typeof icons] || '📄';
-  };
+  // const getTypeIcon = (type: string) => {
+  //   const icons = {
+  //     element: '🧊',
+  //     action: '🏃‍♂️',
+  //     qualite: '✨',
+  //     relation: '🔗',
+  //     abstrait: '💭',
+  //   };
+  //   return icons[type as keyof typeof icons] || '📄';
+  // };
 
   return (
     <div className="bg-white/80 backdrop-blur-sm rounded-xl sm:rounded-2xl shadow-xl border border-white/20 p-4 sm:p-6 h-fit sticky top-4">
@@ -96,7 +97,7 @@ export default function ConceptsAvailable({ concepts, onSelect, pageSize = 6 }: 
                   concept.type,
                 )} rounded-full flex items-center justify-center shadow-sm`}
               >
-                <span className="text-xs sm:text-sm">{getTypeIcon(concept.type)}</span>
+                <span className="text-xs sm:text-sm">{getConceptTypeIcon(concept.type)}</span>
               </div>
 
               {/* Contenu principal */}
