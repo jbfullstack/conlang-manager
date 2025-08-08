@@ -52,7 +52,22 @@ RÉPONSE EN JSON UNIQUEMENT
     const response = await openai.chat.completions.create(buildLLMPromptRequest(prompt));
     const raw = response.choices?.[0]?.message?.content ?? '{}';
     const result = parseLLMJson(raw);
-    return NextResponse.json({ ...result, source: 'llm' });
+    let patternMot: string[] = [];
+    try {
+        // Construis un map id -> mot à partir des concepts récupérés
+        const idToMot: Record<string, string> = {};
+        concepts.forEach((c: any) => {
+            if (c?.id && c?.mot) idToMot[c.id] = c.mot;
+        });
+        const pattern = (result as any).pattern ?? [];
+        patternMot = pattern.map((id: string) => idToMot[id] ?? id);
+    } catch {
+        // en cas d'erreur, on garde empty
+        patternMot = [];
+    }
+
+    // Fusionne pour le client: on garde pattern et patternMot
+    return NextResponse.json({ ...(result as any), patternMot, pattern: (result as any).pattern ?? [], source: 'llm' });
     
   } catch (error) {
     console.error('Erreur search-reverse:', error);

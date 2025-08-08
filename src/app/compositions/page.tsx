@@ -95,17 +95,25 @@ const CompositionPage = () => {
       .then((data) => {
         console.log("🔍 Concepts récupérés de l'API:", data);
 
-        // Transformer les données de votre API pour l'interface
-        const transformedConcepts = data.map((concept: any) => ({
-          id: concept.id,
-          mot: concept.mot,
-          concept: concept.definition, // VOTRE "definition" devient "concept" pour l'UI
-          type: concept.type,
-          proprietes: concept.conceptProperties?.map((cp: any) => cp.property.name) || [],
-          couleur: getColorByType(concept.type),
+        // Normaliser la forme retournée (gérer les deux cas possibles)
+        const list: any[] = Array.isArray(data)
+          ? data
+          : Array.isArray((data as any)?.concepts)
+          ? (data as any).concepts
+          : (data as any)?.concepts?.items ?? [];
+
+        const transformedConcepts = list.map((c: any) => ({
+          id: c.id,
+          mot: c.mot ?? c.label ?? '',
+          concept: c.definition ?? c.concept ?? '',
+          type: c.type,
+          proprietes: ((c.conceptProperties ?? []) as any[])
+            .map((cp: any) => cp.property?.name)
+            .filter(Boolean),
+          couleur: getColorByType(c.type),
         }));
 
-        console.log("🔍 Concepts transformés pour l'UI:", transformedConcepts);
+        console.log("Ø=Ý Concepts transformés pour l'UI:", transformedConcepts);
         setConcepts(transformedConcepts);
       })
       .catch((err) => console.error('Erreur chargement concepts:', err));
@@ -223,7 +231,7 @@ const CompositionPage = () => {
     if (!compositionResult || selectedConcepts.length === 0) return;
 
     try {
-      const response = await fetch('/api/combinations', {
+      const response = await fetch('/api/compositions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -232,7 +240,7 @@ const CompositionPage = () => {
           description: saveFormData.description,
           statut: saveFormData.statut,
           source: compositionResult.source === 'llm' ? 'LLM_SUGGESTED' : 'MANUAL',
-          confidenceScore: compositionResult.confidence,
+          confidenceScore: compositionResult.confidence ?? 0,
         }),
       });
 
@@ -869,6 +877,30 @@ const CompositionPage = () => {
                 </div>
               </div>
 
+              {/* Concepts sélectionnés */}
+              {selectedConcepts.length > 0 && (
+                <div className="mb-2">
+                  {' '}
+                  <div className="text-sm font-medium text-gray-700 mb-1">
+                    Concepts sélectionnés
+                  </div>{' '}
+                  <div className="flex flex-wrap gap-2">
+                    {' '}
+                    {selectedConcepts.map((c) => (
+                      <span
+                        key={c.id}
+                        className={`inline-flex items-center px-2 py-1 rounded-full text-xs ${
+                          c.couleur ?? 'bg-gray-400'
+                        } text-white`}
+                      >
+                        {' '}
+                        {c.mot}{' '}
+                      </span>
+                    ))}{' '}
+                  </div>{' '}
+                </div>
+              )}
+
               {/* Sens */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Sens * :</label>
@@ -951,7 +983,7 @@ const CompositionPage = () => {
               </button>
               <button
                 onClick={handleSaveComposition}
-                disabled={!saveFormData.sens.trim()}
+                disabled={!(saveFormData.sens?.trim() || compositionResult?.sens?.trim())}
                 className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:bg-gray-300"
               >
                 Sauvegarder
