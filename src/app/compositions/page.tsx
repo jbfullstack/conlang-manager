@@ -22,8 +22,6 @@ type CompositionResult = {
   patternWords?: string[];
 };
 
-// Version unifiée : menu en haut (Manuel / reverse IA / IA Analyse)
-// et affichage conditionnel des 3 panneaux, avec partage de la sélection de concepts
 export default function CompositionPage() {
   // Mode actif
   const [mode, setMode] = useState<'manual' | 'ai-search' | 'ai-analyze'>('manual');
@@ -33,8 +31,7 @@ export default function CompositionPage() {
   const [selectedConcepts, setSelectedConcepts] = useState<Concept[]>([]);
 
   // Données IA
-  const [aiReverseInput, setAiReverseInput] = useState(''); // pour IA Reverse Recherche
-  const [aiAnalyzeInput, setAiAnalyzeInput] = useState(''); // pour IA Analyse
+  const [aiReverseInput, setAiReverseInput] = useState('');
   const [compositionResult, setCompositionResult] = useState<CompositionResult | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
 
@@ -48,13 +45,11 @@ export default function CompositionPage() {
 
   // Manuelle: champs descriptifs uniquement visibles en Manuel
   const [manualDescription, setManualDescription] = useState('');
-  const [manualExamples, setManualExamples] = useState<string>('');
+  const [manualExamples, setManualExamples] = useState<string[]>([]);
 
-  // UI: affichage des comps communautaires et concepts dispo sous Résultat IA
-  // Utilisation du hook utilisé dans ta base
   const { communityComps, loading: compsLoading } = useCompositions();
 
-  // Toggle concept dans la composition en cours (manuel et IA analyse)
+  // Toggle concept dans la composition en cours
   const toggleConceptInManual = (c: Concept) => {
     setSelectedConcepts((prev) => {
       const found = prev.find((p) => p.id === c.id);
@@ -63,9 +58,6 @@ export default function CompositionPage() {
       return [...prev, c];
     });
   };
-
-  // Patch: si on clique sur une carte, on l'ajoute pour Manuel et IA Analyse aussi
-  // (l'array selectedConcepts est partagé)
 
   // Composition en cours (affichage)
   const compositionChips = useMemo(
@@ -106,9 +98,11 @@ export default function CompositionPage() {
     }
   };
 
-  // IA Analyse: déclenche via sélection (plus d'input)
-  const handleAnalyzeFromSelection = async (composition: string) => {
+  // IA Analyse: déclenche manuellement
+  const handleAnalyzeFromSelection = async () => {
+    const composition = compositionChips;
     if (!composition?.trim()) return;
+
     setAiLoading(true);
     try {
       const resp = await fetch('/api/analyze-composition', {
@@ -122,7 +116,7 @@ export default function CompositionPage() {
       setCompositionResult({
         sens: 'Composition IA',
         confidence: 0,
-        justification: 'Erreur lors de l’analyse',
+        justification: `Erreur lors de l'analyse`,
         source: 'error',
       });
     } finally {
@@ -133,11 +127,10 @@ export default function CompositionPage() {
   // Sauvegarde: ouverture modal et remplissage automatique
   const openSaveModal = () => {
     if (compositionResult || selectedConcepts.length > 0) {
-      // préremplir le sens avec le résultat IA si dispo
       setSaveFormData((p) => ({
         ...p,
-        sens: compositionResult?.sens ?? p.sens ?? '',
-        description: compositionResult?.justification ?? p.description ?? '',
+        sens: compositionResult?.sens ?? '',
+        description: compositionResult?.justification ?? '',
       }));
       setShowSaveModal(true);
     }
@@ -174,14 +167,7 @@ export default function CompositionPage() {
     }
   };
 
-  // State utile
-  const isSavable = useMemo(() => {
-    const hasManual = (saveFormData.sens ?? '').trim().length > 0;
-    const hasIA = (compositionResult?.sens ?? '').trim().length > 0;
-    return hasManual || hasIA || selectedConcepts.length > 0;
-  }, [saveFormData.sens, compositionResult?.sens, selectedConcepts.length]);
-
-  // Créer Composition Manuelle (via l’API)
+  // Créer Composition Manuelle
   const createManualComposition = async () => {
     if (selectedConcepts.length < 2) {
       alert('Sélectionnez au moins 2 concepts pour une composition manuelle.');
@@ -204,13 +190,9 @@ export default function CompositionPage() {
       });
       if (resp.ok) {
         alert('Composition Manuelle créée');
-        // Reset manuel
         setSelectedConcepts([]);
         setManualDescription('');
-        setManualExamples('');
-        // Rafraîchir les listes via hook
-        // Si ton hook expose refresh, appelle-le ; sinon laisse le hook faire son fetch initial
-        // Ici on ne fait pas de fetch manuel additionnel pour rester cohérent
+        setManualExamples([]);
       } else {
         const err = await resp.json().catch(() => ({} as any));
         alert('Erreur création: ' + (err?.error ?? 'Erreur inconnue'));
@@ -220,12 +202,6 @@ export default function CompositionPage() {
     }
   };
 
-  // UI: layout
-  const leftConcepts = (
-    <ConceptsAvailable concepts={concepts} onSelect={toggleConceptInManual} pageSize={9} />
-  );
-
-  // Compositions communautaires récentes affichées en grille via CompositionsRecent
   const handleUsePatternFromComp = useCallback(
     (ids: string[]) => {
       const mapById = new Map<string, Concept>();
@@ -242,70 +218,68 @@ export default function CompositionPage() {
     [concepts],
   );
 
-  const availableSections = (
-    <CompositionsRecent
-      comps={communityComps}
-      concepts={concepts}
-      onUsePattern={handleUsePatternFromComp}
-    />
-  );
-
-  // UI général
   return (
     <div className="max-w-7xl mx-auto p-6 space-y-6">
-      {/* TABS: Manuel / reverse IA / IA Analyse */}
-      <div className="bg-white rounded-lg shadow p-4">
-        <div className="flex items-center justify-between mb-2">
-          <h1 className="text-2xl font-bold">Atelier de Composition</h1>
-          <div className="flex gap-2">
-            <button
-              className={
-                mode === 'manual'
-                  ? 'px-4 py-2 bg-blue-600 text-white rounded'
-                  : 'px-4 py-2 border rounded'
-              }
-              onClick={() => setMode('manual')}
-            >
-              Manuel
-            </button>
-            <button
-              className={
-                mode === 'ai-search'
-                  ? 'px-4 py-2 bg-blue-400 text-white rounded'
-                  : 'px-4 py-2 border rounded'
-              }
-              onClick={() => setMode('ai-search')}
-            >
-              reverse IA
-            </button>
-            <button
-              className={
-                mode === 'ai-analyze'
-                  ? 'px-4 py-2 bg-green-600 text-white rounded'
-                  : 'px-4 py-2 border rounded'
-              }
-              onClick={() => setMode('ai-analyze')}
-            >
-              IA Analyse
-            </button>
+      {/* HEADER avec TABS */}
+      <div className="bg-white rounded-lg shadow-md p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h1 className="text-2xl font-bold text-gray-900 flex items-center">
+            🧬 Atelier de Composition
+          </h1>
+          <div className="flex items-center space-x-4 text-sm text-gray-600">
+            <div className="flex items-center">🧠 {concepts.length} concepts</div>
+            <div className="flex items-center">📚 {communityComps.length} compositions</div>
           </div>
         </div>
 
-        <p className="text-sm text-gray-600 mb-2">
-          {mode === 'manual' &&
-            'Sélectionnez des concepts en cliquant pour composer. Définissez la description et créez la composition manuelle.'}
-          {mode === 'ai-search' &&
-            'Saisissez un concept pour que l’IA retourne une composition (reverse IA).'}
-          {mode === 'ai-analyze' &&
-            'Cliquez sur les concepts pour construire la composition à analyser.'}
+        <div className="flex items-center space-x-4 mb-4">
+          <button
+            onClick={() => setMode('manual')}
+            className={`px-4 py-2 rounded-lg flex items-center space-x-2 ${
+              mode === 'manual' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-700'
+            }`}
+          >
+            <span>✋</span>
+            <span>Composition Manuelle</span>
+          </button>
+          <button
+            onClick={() => setMode('ai-search')}
+            className={`px-4 py-2 rounded-lg flex items-center space-x-2 ${
+              mode === 'ai-search' ? 'bg-purple-500 text-white' : 'bg-gray-100 text-gray-700'
+            }`}
+          >
+            <span>🔍</span>
+            <span>Recherche IA</span>
+          </button>
+          <button
+            onClick={() => setMode('ai-analyze')}
+            className={`px-4 py-2 rounded-lg flex items-center space-x-2 ${
+              mode === 'ai-analyze' ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-700'
+            }`}
+          >
+            <span>🔬</span>
+            <span>Analyse IA</span>
+          </button>
+        </div>
+
+        <p className="text-gray-600">
+          {mode === 'manual' && 'Sélectionnez des concepts pour créer une composition'}
+          {mode === 'ai-search' && 'Décrivez un concept en français pour trouver sa composition'}
+          {mode === 'ai-analyze' && 'Sélectionnez des concepts puis analysez la composition'}
         </p>
+      </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Colonne gauche: Concepts disponibles avec pagination intégrée */}
-          {leftConcepts}
+      {/* LAYOUT PRINCIPAL */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* COLONNE 1: Concepts disponibles */}
+        <div className="lg:col-span-1">
+          <ConceptsAvailable concepts={concepts} onSelect={toggleConceptInManual} />
+        </div>
 
-          {/* Colonne droite: panneaux actifs selon le mode */}
-          <div className="space-y-4">
+        {/* COLONNE 2: Panneaux actifs + Résultat IA */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Panneau actif selon le mode */}
+          <div>
             {mode === 'manual' && (
               <ManualComposer
                 concepts={concepts}
@@ -320,7 +294,7 @@ export default function CompositionPage() {
                 onReset={() => {
                   setSelectedConcepts([]);
                   setManualDescription('');
-                  setManualExamples('');
+                  setManualExamples([]);
                 }}
               />
             )}
@@ -334,29 +308,39 @@ export default function CompositionPage() {
             )}
             {mode === 'ai-analyze' && (
               <AIAnalyzePanel
-                // Analyse via sélection
                 selectedConcepts={selectedConcepts}
+                compositionChips={compositionChips}
                 onAnalyzeFromSelection={handleAnalyzeFromSelection}
                 loading={aiLoading}
               />
             )}
           </div>
+
+          {/* Résultat IA - maintenant dans la même colonne */}
+          {compositionResult && (
+            <CompositionResultPanel
+              compositionResult={compositionResult}
+              onClose={() => setCompositionResult(null)}
+              onSave={openSaveModal}
+            />
+          )}
         </div>
-
-        {/* Résultat IA (centré et adaptable via CompositionResultPanel) */}
-        {compositionResult && (
-          <CompositionResultPanel
-            compositionResult={compositionResult}
-            onClose={() => setCompositionResult(null)}
-            onSave={openSaveModal}
-          />
-        )}
-
-        {/* Résultats et sections en dessous (Compositions récentes) */}
-        {compsLoading ? <div>Chargement des compositions...</div> : availableSections}
       </div>
 
-      {/* Modal Sauvegarde (pré-rempli) */}
+      {/* COMPOSITIONS RÉCENTES - en bas */}
+      <div>
+        {compsLoading ? (
+          <div>Chargement des compositions...</div>
+        ) : (
+          <CompositionsRecent
+            comps={communityComps}
+            concepts={concepts}
+            onUsePattern={handleUsePatternFromComp}
+          />
+        )}
+      </div>
+
+      {/* Modal Sauvegarde */}
       {showSaveModal && (
         <SaveModal
           isOpen={showSaveModal}
