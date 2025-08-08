@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { openai } from '@/lib/openai';
 import { PrismaClient } from '@prisma/client';
+import parseLLMJson, { buildLLMPromptRequest } from '@/lib/llm-utils';
 
 const prisma = new PrismaClient();
 
@@ -9,7 +10,7 @@ export async function POST(request: NextRequest) {
     const { composition } = await request.json();
     
     // Récupérer tous les concepts avec leurs propriétés
-    const allConceptsFromDB = await prisma.concept.findMany({
+    const concepts = await prisma.concept.findMany({
       where: { isActive: true },
       include: {
         conceptProperties: {
@@ -21,29 +22,36 @@ export async function POST(request: NextRequest) {
     });
 
     const prompt = `
-COMPOSITION À ANALYSER: "${composition}"
+Tu es un linguiste expert en langue construite. Détermine le sens dominant d'une composition donnée à partir des primitives ci-dessous.
 
-CONCEPTS DISPONIBLES:
-${allConceptsFromDB.map(c => `- "${c.mot}" = ${c.definition} (${c.type})`).join('\n')}
+COMPOSITION À ANALYSER:
+"${composition}"
 
-TÂCHE: Détermine le sens de cette composition dans notre langue construite.
+PRIMITIFS DISPONIBLES:
+${concepts.map(c => `- ${c.mot} = ${c.definition} (type: ${c.type})`).join('\n')}
 
-RÉPONDS EN JSON:
+RAPPORT: produire uniquement du JSON (strict) décrivant le sens principal et, si nécessaire, des alternatives.
+
+FORMAT DE RÉPONSE (JSON STRICT, 0 ou 1 pour les champs numériques):
 {
-  "sens": "sens déduit de la composition",
-  "confidence": 0.65,
-  "justification": "analyse des éléments de la composition", 
-  "examples": ["usage possible"]
-}`;
+  "sens": "sens principal proposé",
+  "confidence": 0.0,
+  "justification": "raisonnement logique",
+  "examples": ["exemple d'usage 1"],
+  "alternatives": [
+    {"sens": "sens alternatif 1", "confidence": 0.0},
+    {"sens": "sens alternatif 2", "confidence": 0.0}
+  ],
+  "missing_concepts": ["nom_prochain_concept_si_manquant"],
+  "source": "llm"
+}
+RÉPONSE EN JSON UNIQUEMENT
+`;
 
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.4,
-      max_tokens: 400
-    });
+    const response = await openai.chat.completions.create(buildLLMPromptRequest(prompt));
 
-    const result = JSON.parse(response.choices[0].message.content || '{}');
+    const raw = response.choices?.[0]?.message?.content ?? '{}';
+    const result = parseLLMJson(raw);
     return NextResponse.json({ ...result, source: 'llm' });
     
   } catch (error) {

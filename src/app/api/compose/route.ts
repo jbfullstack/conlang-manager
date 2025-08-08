@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { openai } from '@/lib/openai';
 import { PrismaClient } from '@prisma/client';
+import parseLLMJson, { buildLLMPromptRequest } from '@/lib/llm-utils';
 
 const prisma = new PrismaClient();
 
 export async function POST(request: NextRequest) {
   try {
     const { conceptIds } = await request.json();
+    
+    // 🔍 DEBUG 1: Vérifier ce qui arrive du front-end
+    console.log('🔍 conceptIds reçus:', conceptIds);
     
     // Récupérer les concepts demandés avec leurs propriétés
     const conceptsFromDB = await prisma.concept.findMany({
@@ -23,61 +27,102 @@ export async function POST(request: NextRequest) {
       }
     });
 
+    // 🔍 DEBUG 2: Vérifier ce que retourne Prisma
+    console.log('🔍 conceptsFromDB trouvés:', conceptsFromDB.length);
+    console.log('🔍 Premier concept de DB:', conceptsFromDB[0]);
+
     // Transformer pour l'analyse
     const concepts = conceptsFromDB.map(c => ({
       id: c.id,
       mot: c.mot,
-      concept: c.definition, // IMPORTANT: definition -> concept pour la logique
+      concept: c.definition,
       type: c.type,
       proprietes: c.conceptProperties.map(cp => cp.property.name)
     }));
 
-    // 1. RÈGLES ALGORITHMIQUES
-    const algorithmicResult = applyCompositionRules(concepts);
-    if (algorithmicResult && algorithmicResult.confidence >= 0.7) {
-      return NextResponse.json(algorithmicResult);
-    }
-
-    // 2. APPEL LLM
+    // 🔍 DEBUG 3: Vérifier la transformation
+    console.log('🔍 concepts transformés:', concepts);
+    
     const prompt = `
-Tu es un expert linguistique travaillant sur une langue construite basée sur des concepts primitifs.
+Tu es un linguiste expert en langue construite par composition de concepts primitifs.
 
-CONCEPTS À COMBINER:
-${concepts.map(c => `- "${c.mot}" = ${c.concept} (type: ${c.type}, propriétés: ${c.proprietes.join(', ')})`).join('\n')}
+CONCEPTS SÉLECTIONNÉS (IDs et labels):
+${concepts.map(c => `- ${c.id} : ${c.mot} (${c.type})`).join('\n')}
 
-CONTEXTE: Cette langue fonctionne par composition logique. Les concepts s'assemblent selon des règles sémantiques naturelles.
+OBJECTIF: produire la meilleure composition reliant ces concepts pour exprimer un sens donné.
 
-EXEMPLES DE COMPOSITIONS RÉUSSIES:
-- "go" (eau) + "tomu" (mouvement rapide) = "torrent/cascade"
-- "solu" (lumière) + "vastè" (immensité) = "horizon lumineux/aube"
+CONVENTIONS:
+- Pattern attendu: ["id1","id2",...]
+- Structure du sens: décrit par un champ "sens" et une justification
+- Si des règles algorithmiques simples permettent le résultat directement, privilégier l’algorithme; sinon déléguer à l’LLM
+- RÉSULTAT EN JSON UNIQUEMENT avec les champs:
+  {
+    "sens": "texte du sens dégagé",
+    "confidence": 0.0,
+    "justification": "raisonnement",
+    "examples": ["exemple d’usage"],
+    "alternatives": [
+      {"sens": "sens alternatif", "confidence": 0.0}
+    ],
+    "source": "algorithmic" | "llm"
+  }
 
-TÂCHE: Détermine le sens le plus probable de la combinaison ci-dessus.
+TÂCHE: retourne le JSON correspondant à la composition déterminée par les concepts fournis. Si une règle spécifique existe (par ex. go + tomu = torrent), applique-la et renseigne le champ source = "algorithmic".
+RÉPONSE EN JSON UNIQUEMENT
+`;
 
-RÉPONDS EN JSON UNIQUEMENT:
-{
-  "sens": "sens principal proposé",
-  "confidence": 0.75,
-  "justification": "explication logique basée sur les propriétés",
-  "examples": ["exemple d'usage 1", "exemple d'usage 2"],
-  "alternatives": [
-    {"sens": "sens alternatif 1", "confidence": 0.6},
-    {"sens": "sens alternatif 2", "confidence": 0.4}
-  ]
-}`;
+    console.log('compost POST prompt :', prompt);
 
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.3,
-      max_tokens: 500
-    });
+    const response = await openai.chat.completions.create(buildLLMPromptRequest(prompt, 0.3, 500));
 
-    const result = JSON.parse(response.choices[0].message.content || '{}');
+        const raw = response.choices?.[0]?.message?.content ?? '{}';
+        const result = parseLLMJson(raw);
+
+    console.log('compost POST result :', result);
     return NextResponse.json({ ...result, source: 'llm' });
     
-  } catch (error) {
+  } catch (error: any) {
     console.error('Erreur compose:', error);
-    return NextResponse.json({ error: 'Erreur lors de l\'analyse' }, { status: 500 });
+    
+    // GESTION SPÉCIFIQUE DES ERREURS OPENAI
+    if (error?.status === 429) {
+      return NextResponse.json({
+        sens: "Limite de requêtes atteinte",
+        confidence: 0,
+        justification: "Trop de requêtes envoyées à l'IA. Réessayez dans quelques minutes.",
+        source: 'error',
+        error_type: 'rate_limit'
+      }, { status: 200 }); // 200 pour que l'UI affiche le message
+    }
+    
+    if (error?.status === 401) {
+      return NextResponse.json({
+        sens: "Erreur d'authentification IA",
+        confidence: 0,
+        justification: "Clé API OpenAI invalide ou expirée.",
+        source: 'error',
+        error_type: 'auth_error'
+      }, { status: 200 });
+    }
+    
+    if (error?.status === 402) {
+      return NextResponse.json({
+        sens: "Crédit IA épuisé",
+        confidence: 0,
+        justification: "Votre crédit OpenAI est épuisé. Veuillez recharger votre compte.",
+        source: 'error',
+        error_type: 'insufficient_quota'
+      }, { status: 200 });
+    }
+    
+    // Erreur générale
+    return NextResponse.json({
+      sens: "Erreur d'analyse",
+      confidence: 0,
+      justification: "Erreur technique lors de l'analyse. Réessayez plus tard.",
+      source: 'error',
+      error_type: 'general_error'
+    }, { status: 200 });
   }
 }
 

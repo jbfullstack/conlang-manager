@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { openai } from '@/lib/openai';
 import { PrismaClient } from '@prisma/client';
+import parseLLMJson, { buildLLMPromptRequest } from '@/lib/llm-utils';
 
 const prisma = new PrismaClient();
 
@@ -9,7 +10,7 @@ export async function POST(request: NextRequest) {
     const { frenchInput } = await request.json();
     
     // Récupérer tous les concepts
-    const allConceptsFromDB = await prisma.concept.findMany({
+    const concepts = await prisma.concept.findMany({
       where: { isActive: true },
       include: {
         conceptProperties: {
@@ -21,39 +22,36 @@ export async function POST(request: NextRequest) {
     });
 
     const prompt = `
-Tu es un expert linguistique. Tu dois trouver comment exprimer un concept français avec une langue construite.
+Tu es un linguiste expert en langue construite basée sur des concepts primitifs.
 
-CONCEPT À EXPRIMER EN FRANÇAIS: "${frenchInput}"
+RAPPORT: produire uniquement du JSON (strict) décrivant une ou plusieurs combinaisons possibles.
 
-CONCEPTS PRIMITIFS DISPONIBLES:
-${allConceptsFromDB.map(c => `- "${c.mot}" = ${c.definition} (${c.type})`).join('\n')}
+CONCEPT FRANÇAIS À EXPÉDUIR: "${frenchInput}"
 
-EXEMPLES DE COMPOSITIONS RÉUSSIES:
-- "torrent" → "go" (eau) + "tomu" (mouvement rapide)
-- "horizon lumineux" → "solu" (lumière) + "vastè" (immensité)
+PRIMITIFS DISPONIBLES (liste succincte, ne pas réécrire tout le détail) :
+${concepts.map(c => `- ${c.id}: ${c.mot} (${c.type})`).join('\n')}
 
-TÂCHE: Trouve la meilleure composition pour exprimer "${frenchInput}".
+TÂCHE: proposer la meilleure composition (1 sens principal) qui exprime le concept français donné, en utilisant les primitives disponibles.
 
-RÉPONDS EN JSON:
+FORMAT DE RÉPONSE (JSON STRICT, uniquement ces champs):
 {
-  "sens": "Proposition: go + tomu pour 'torrent'",
-  "confidence": 0.8,
-  "justification": "Eau + mouvement = flux naturel correspondant au concept",
-  "examples": ["go tomu = torrent qui dévale"],
-  "missing_concepts": ["concept manquant si nécessaire"],
-  "alternatives": [
-    {"sens": "alternative 1", "confidence": 0.6}
-  ]
-}`;
+  "sens": "texte décrivant le sens principal",
+  "confidence": 0.0,
+  "justification": "raisonnement succinct décrivant pourquoi ce sens est approprié",
+  "examples": ["exemple d'usage 1", "exemple d'usage 2"],
+  "pattern": ["concept_id_1","concept_id_2",...], // ordre correspond à la composition
+  "missing_concepts": ["nom_prochain_concept_si_manquant"], // optionnel
+  "proposed_new_primitives": [
+    {"name": "nom_primaire", "definition": "définition courte", "type": "element | action | ...", "rationale": "pourquoi ajouter"}
+  ],
+  "source": "llm"
+}
+RÉPONSE EN JSON UNIQUEMENT
+`;
 
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.4,
-      max_tokens: 400
-    });
-
-    const result = JSON.parse(response.choices[0].message.content || '{}');
+    const response = await openai.chat.completions.create(buildLLMPromptRequest(prompt));
+    const raw = response.choices?.[0]?.message?.content ?? '{}';
+    const result = parseLLMJson(raw);
     return NextResponse.json({ ...result, source: 'llm' });
     
   } catch (error) {

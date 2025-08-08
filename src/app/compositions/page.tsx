@@ -18,9 +18,10 @@ interface CompositionResult {
   sens: string;
   confidence: number;
   justification: string;
-  source: 'cache' | 'algorithmic' | 'llm' | 'community';
+  source: 'cache' | 'algorithmic' | 'llm' | 'community' | 'error';
   examples?: string[];
   alternatives?: Array<{ sens: string; confidence: number }>;
+  error_type?: string; // Pour différencier les types d'erreur
 }
 
 interface ExistingComposition {
@@ -33,58 +34,7 @@ interface ExistingComposition {
   usage_examples?: string[];
 }
 
-// Données de test - remplacer par vos vraies données
-const mockConcepts: Concept[] = [
-  {
-    id: '1',
-    mot: 'go',
-    concept: 'eau',
-    type: 'element',
-    proprietes: ['liquide', 'fluide', 'vital'],
-    couleur: 'bg-blue-500',
-  },
-  {
-    id: '2',
-    mot: 'tomu',
-    concept: 'mouvement rapide',
-    type: 'action',
-    proprietes: ['rapide', 'dynamique', 'intense'],
-    couleur: 'bg-red-500',
-  },
-  {
-    id: '3',
-    mot: 'solu',
-    concept: 'lumière',
-    type: 'element',
-    proprietes: ['brillant', 'chaud', 'visible'],
-    couleur: 'bg-yellow-500',
-  },
-  {
-    id: '4',
-    mot: 'vastè',
-    concept: 'immensité',
-    type: 'qualite',
-    proprietes: ['grand', 'infini', 'ouvert'],
-    couleur: 'bg-purple-500',
-  },
-  {
-    id: '5',
-    mot: 'minu',
-    concept: 'finesse/petitesse',
-    type: 'qualite',
-    proprietes: ['petit', 'délicat', 'précis'],
-    couleur: 'bg-green-500',
-  },
-  {
-    id: '6',
-    mot: 'kalu',
-    concept: 'froid',
-    type: 'qualite',
-    proprietes: ['froid', 'rigide', 'dur'],
-    couleur: 'bg-cyan-500',
-  },
-];
-
+// Données de test pour les compositions existantes
 const mockCompositions: ExistingComposition[] = [
   {
     id: '1',
@@ -118,6 +68,48 @@ const CompositionPage = () => {
     preferredSource: 'any',
   });
   const [history, setHistory] = useState<CompositionResult[]>([]);
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [saveFormData, setSaveFormData] = useState({
+    sens: '',
+    description: '',
+    statut: 'PROPOSITION' as 'PROPOSITION' | 'EN_COURS' | 'ADOPTE',
+  });
+  const [concepts, setConcepts] = useState<Concept[]>([]); // État pour les concepts chargés
+
+  // Fonction helper pour les couleurs
+  const getColorByType = (type: string): string => {
+    const colors = {
+      element: 'bg-blue-500',
+      action: 'bg-red-500',
+      qualite: 'bg-green-500',
+      relation: 'bg-purple-500',
+      abstrait: 'bg-yellow-500',
+    };
+    return colors[type as keyof typeof colors] || 'bg-gray-500';
+  };
+
+  // Charger les concepts depuis l'API
+  useEffect(() => {
+    fetch('/api/concepts')
+      .then((res) => res.json())
+      .then((data) => {
+        console.log("🔍 Concepts récupérés de l'API:", data);
+
+        // Transformer les données de votre API pour l'interface
+        const transformedConcepts = data.map((concept: any) => ({
+          id: concept.id,
+          mot: concept.mot,
+          concept: concept.definition, // VOTRE "definition" devient "concept" pour l'UI
+          type: concept.type,
+          proprietes: concept.conceptProperties?.map((cp: any) => cp.property.name) || [],
+          couleur: getColorByType(concept.type),
+        }));
+
+        console.log("🔍 Concepts transformés pour l'UI:", transformedConcepts);
+        setConcepts(transformedConcepts);
+      })
+      .catch((err) => console.error('Erreur chargement concepts:', err));
+  }, []);
 
   // API CALLS - À REMPLACER PAR VOS VRAIS APPELS
   const analyzeManualComposition = async (concepts: Concept[]): Promise<CompositionResult> => {
@@ -198,6 +190,13 @@ const CompositionPage = () => {
   const handleManualAnalysis = async () => {
     if (selectedConcepts.length < 2) return;
 
+    // 🔍 DEBUG FRONT-END
+    console.log('🔍 selectedConcepts:', selectedConcepts);
+    console.log(
+      '🔍 IDs envoyés:',
+      selectedConcepts.map((c) => c.id),
+    );
+
     const result = await analyzeManualComposition(selectedConcepts);
     setCompositionResult(result);
     setHistory((prev) => [result, ...prev].slice(0, 10));
@@ -219,15 +218,59 @@ const CompositionPage = () => {
     setHistory((prev) => [result, ...prev].slice(0, 10));
   };
 
+  // Fonction de sauvegarde de composition
+  const handleSaveComposition = async () => {
+    if (!compositionResult || selectedConcepts.length === 0) return;
+
+    try {
+      const response = await fetch('/api/combinations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pattern: selectedConcepts.map((c) => c.id),
+          sens: saveFormData.sens || compositionResult.sens,
+          description: saveFormData.description,
+          statut: saveFormData.statut,
+          source: compositionResult.source === 'llm' ? 'LLM_SUGGESTED' : 'MANUAL',
+          confidenceScore: compositionResult.confidence,
+        }),
+      });
+
+      if (response.ok) {
+        alert('Composition sauvegardée avec succès !');
+        setShowSaveModal(false);
+        setSaveFormData({ sens: '', description: '', statut: 'PROPOSITION' });
+        // Reset la sélection
+        setSelectedConcepts([]);
+        setCompositionResult(null);
+      } else {
+        alert('Erreur lors de la sauvegarde');
+      }
+    } catch (error) {
+      console.error('Erreur sauvegarde:', error);
+      alert('Erreur lors de la sauvegarde');
+    }
+  };
+
+  const openSaveModal = () => {
+    if (compositionResult) {
+      setSaveFormData((prev) => ({
+        ...prev,
+        sens: compositionResult.sens,
+      }));
+      setShowSaveModal(true);
+    }
+  };
+
   const filteredConcepts = useMemo(() => {
-    return mockConcepts.filter((concept) => {
+    return concepts.filter((concept) => {
       const matchesSearch =
         concept.mot.toLowerCase().includes(searchQuery.toLowerCase()) ||
         concept.concept.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesType = filters.type === 'all' || concept.type === filters.type;
       return matchesSearch && matchesType;
     });
-  }, [searchQuery, filters]);
+  }, [searchQuery, filters, concepts]);
 
   const conceptsByType = useMemo(() => {
     const groups: Record<string, Concept[]> = {};
@@ -246,12 +289,15 @@ const CompositionPage = () => {
         return '⚡';
       case 'llm':
         return '🧠';
+      case 'error':
+        return '⚠️';
       default:
         return 'ℹ️';
     }
   };
 
-  const getConfidenceColor = (confidence: number) => {
+  const getConfidenceColor = (confidence: number, source?: string) => {
+    if (source === 'error') return 'text-red-600';
     if (confidence >= 0.8) return 'text-green-600';
     if (confidence >= 0.6) return 'text-yellow-600';
     return 'text-red-600';
@@ -266,7 +312,7 @@ const CompositionPage = () => {
             ✨ Atelier de Composition
           </h1>
           <div className="flex items-center space-x-4 text-sm text-gray-600">
-            <div className="flex items-center">🧠 {mockConcepts.length} concepts</div>
+            <div className="flex items-center">🧠 {concepts.length} concepts</div>
             <div className="flex items-center">✅ {mockCompositions.length} compositions</div>
           </div>
         </div>
@@ -498,7 +544,7 @@ const CompositionPage = () => {
               <div className="mt-6 p-4 bg-gray-50 rounded-lg">
                 <h3 className="font-medium text-gray-700 mb-2">Concepts disponibles :</h3>
                 <div className="flex flex-wrap gap-2">
-                  {mockConcepts.slice(0, 6).map((concept) => (
+                  {concepts.slice(0, 6).map((concept) => (
                     <div
                       key={concept.id}
                       className={`inline-flex items-center space-x-1 px-2 py-1 rounded text-xs text-white ${
@@ -508,10 +554,8 @@ const CompositionPage = () => {
                       <span>{concept.mot}</span>
                     </div>
                   ))}
-                  {mockConcepts.length > 6 && (
-                    <span className="text-xs text-gray-500">
-                      +{mockConcepts.length - 6} autres...
-                    </span>
+                  {concepts.length > 6 && (
+                    <span className="text-xs text-gray-500">+{concepts.length - 6} autres...</span>
                   )}
                 </div>
               </div>
@@ -603,7 +647,9 @@ const CompositionPage = () => {
             {compositionResult && (
               <div
                 className={`p-4 rounded-lg border-2 ${
-                  compositionResult.confidence >= 0.7
+                  compositionResult.source === 'error'
+                    ? 'border-red-200 bg-red-50'
+                    : compositionResult.confidence >= 0.7
                     ? 'border-green-200 bg-green-50'
                     : compositionResult.confidence >= 0.5
                     ? 'border-yellow-200 bg-yellow-50'
@@ -619,11 +665,20 @@ const CompositionPage = () => {
                         ? 'Déjà connu'
                         : compositionResult.source === 'algorithmic'
                         ? 'Règle linguistique'
+                        : compositionResult.source === 'error'
+                        ? 'Erreur'
                         : 'Analyse IA'}
                     </span>
                   </div>
-                  <div className={`font-bold ${getConfidenceColor(compositionResult.confidence)}`}>
-                    {(compositionResult.confidence * 100).toFixed(0)}%
+                  <div
+                    className={`font-bold ${getConfidenceColor(
+                      compositionResult.confidence,
+                      compositionResult.source,
+                    )}`}
+                  >
+                    {compositionResult.source === 'error'
+                      ? '❌'
+                      : `${(compositionResult.confidence * 100).toFixed(0)}%`}
                   </div>
                 </div>
 
@@ -635,63 +690,86 @@ const CompositionPage = () => {
                   <p className="text-sm text-gray-600 italic">{compositionResult.justification}</p>
                 </div>
 
-                {/* EXEMPLES D'USAGE */}
-                {compositionResult.examples && compositionResult.examples.length > 0 && (
-                  <div className="mb-3">
-                    <h5 className="font-medium text-gray-700 mb-1">Exemples :</h5>
-                    <ul className="text-sm text-gray-600 list-disc list-inside space-y-1">
-                      {compositionResult.examples.map((example, i) => (
-                        <li key={i}>{example}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {/* ALTERNATIVES */}
-                {compositionResult.alternatives && compositionResult.alternatives.length > 0 && (
-                  <div className="mb-4">
-                    <h5 className="font-medium text-gray-700 mb-2">Sens alternatifs :</h5>
-                    <div className="space-y-1">
-                      {compositionResult.alternatives.map((alt, i) => (
-                        <div key={i} className="text-sm flex items-center justify-between">
-                          <span className="text-gray-600">• {alt.sens}</span>
-                          <span className={`font-medium ${getConfidenceColor(alt.confidence)}`}>
-                            {(alt.confidence * 100).toFixed(0)}%
-                          </span>
-                        </div>
-                      ))}
+                {/* EXEMPLES D'USAGE - seulement si pas d'erreur */}
+                {compositionResult.examples &&
+                  compositionResult.examples.length > 0 &&
+                  compositionResult.source !== 'error' && (
+                    <div className="mb-3">
+                      <h5 className="font-medium text-gray-700 mb-1">Exemples :</h5>
+                      <ul className="text-sm text-gray-600 list-disc list-inside space-y-1">
+                        {compositionResult.examples.map((example, i) => (
+                          <li key={i}>{example}</li>
+                        ))}
+                      </ul>
                     </div>
-                  </div>
-                )}
+                  )}
+
+                {/* ALTERNATIVES - seulement si pas d'erreur */}
+                {compositionResult.alternatives &&
+                  compositionResult.alternatives.length > 0 &&
+                  compositionResult.source !== 'error' && (
+                    <div className="mb-4">
+                      <h5 className="font-medium text-gray-700 mb-2">Sens alternatifs :</h5>
+                      <div className="space-y-1">
+                        {compositionResult.alternatives.map((alt, i) => (
+                          <div key={i} className="text-sm flex items-center justify-between">
+                            <span className="text-gray-600">• {alt.sens}</span>
+                            <span className={`font-medium ${getConfidenceColor(alt.confidence)}`}>
+                              {(alt.confidence * 100).toFixed(0)}%
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                 {/* ACTIONS */}
                 <div className="flex space-x-2 pt-3 border-t border-gray-200">
-                  <button
-                    className="flex-1 py-2 px-3 bg-green-500 text-white rounded text-sm hover:bg-green-600"
-                    onClick={() => {
-                      alert('Composition validée et sauvegardée !');
-                    }}
-                  >
-                    ✓ Valider
-                  </button>
-                  <button
-                    className="flex-1 py-2 px-3 bg-yellow-500 text-white rounded text-sm hover:bg-yellow-600"
-                    onClick={() => {
-                      const newSens = prompt('Modifier le sens:', compositionResult.sens);
-                      if (newSens) {
-                        setCompositionResult((prev) => (prev ? { ...prev, sens: newSens } : null));
-                      }
-                    }}
-                  >
-                    ✏️ Modifier
-                  </button>
+                  {compositionResult.source !== 'error' ? (
+                    <>
+                      <button
+                        className="flex-1 py-2 px-3 bg-green-500 text-white rounded text-sm hover:bg-green-600"
+                        onClick={openSaveModal}
+                      >
+                        💾 Sauvegarder
+                      </button>
+                      <button
+                        className="flex-1 py-2 px-3 bg-yellow-500 text-white rounded text-sm hover:bg-yellow-600"
+                        onClick={() => {
+                          const newSens = prompt('Modifier le sens:', compositionResult.sens);
+                          if (newSens) {
+                            setCompositionResult((prev) =>
+                              prev ? { ...prev, sens: newSens } : null,
+                            );
+                          }
+                        }}
+                      >
+                        ✏️ Modifier
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      className="flex-1 py-2 px-3 bg-blue-500 text-white rounded text-sm hover:bg-blue-600"
+                      onClick={() => {
+                        if (mode === 'manual') {
+                          handleManualAnalysis();
+                        } else if (mode === 'ai-search') {
+                          handleAISearch();
+                        } else {
+                          handleAIAnalyze();
+                        }
+                      }}
+                    >
+                      🔄 Réessayer
+                    </button>
+                  )}
                   <button
                     className="flex-1 py-2 px-3 bg-red-500 text-white rounded text-sm hover:bg-red-600"
                     onClick={() => {
                       setCompositionResult(null);
                     }}
                   >
-                    ✗ Rejeter
+                    ✗ Fermer
                   </button>
                 </div>
               </div>
@@ -751,10 +829,10 @@ const CompositionPage = () => {
                 </div>
                 <button
                   onClick={() => {
-                    const concepts = comp.pattern
-                      .map((p) => mockConcepts.find((c) => c.mot === p))
+                    const conceptsForReuse = comp.pattern
+                      .map((p) => concepts.find((c) => c.mot === p))
                       .filter(Boolean) as Concept[];
-                    setSelectedConcepts(concepts);
+                    setSelectedConcepts(conceptsForReuse);
                     setMode('manual');
                   }}
                   className="mt-2 text-blue-500 text-sm hover:underline"
@@ -763,6 +841,122 @@ const CompositionPage = () => {
                 </button>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE SAUVEGARDE */}
+      {showSaveModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">💾 Sauvegarder la Composition</h2>
+
+            <div className="space-y-4">
+              {/* Pattern de concepts */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Concepts :</label>
+                <div className="flex flex-wrap gap-2 p-2 bg-gray-50 rounded">
+                  {selectedConcepts.map((concept) => (
+                    <div
+                      key={concept.id}
+                      className={`inline-flex items-center px-2 py-1 rounded text-sm text-white ${
+                        concept.couleur || 'bg-gray-500'
+                      }`}
+                    >
+                      <span>{concept.mot}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Sens */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Sens * :</label>
+                <input
+                  type="text"
+                  value={saveFormData.sens}
+                  onChange={(e) => setSaveFormData((prev) => ({ ...prev, sens: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  placeholder="ex: torrent/cascade"
+                  required
+                />
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Description :
+                </label>
+                <textarea
+                  value={saveFormData.description}
+                  onChange={(e) =>
+                    setSaveFormData((prev) => ({ ...prev, description: e.target.value }))
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 resize-none h-20"
+                  placeholder="Description optionnelle de la composition..."
+                />
+              </div>
+
+              {/* Statut */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Statut :</label>
+                <select
+                  value={saveFormData.statut}
+                  onChange={(e) =>
+                    setSaveFormData((prev) => ({ ...prev, statut: e.target.value as any }))
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="PROPOSITION">Proposition</option>
+                  <option value="EN_COURS">En cours</option>
+                  <option value="ADOPTE">Adopté</option>
+                </select>
+              </div>
+
+              {/* Informations complémentaires */}
+              {compositionResult && (
+                <div className="bg-gray-50 p-3 rounded text-sm">
+                  <div className="flex items-center justify-between">
+                    <span>Confiance : </span>
+                    <span
+                      className={getConfidenceColor(
+                        compositionResult.confidence,
+                        compositionResult.source,
+                      )}
+                    >
+                      {(compositionResult.confidence * 100).toFixed(0)}%
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Source : </span>
+                    <span>
+                      {compositionResult.source === 'llm'
+                        ? 'IA'
+                        : compositionResult.source === 'algorithmic'
+                        ? 'Algorithme'
+                        : 'Cache'}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Actions de la modal */}
+            <div className="flex justify-end space-x-3 mt-6">
+              <button
+                onClick={() => setShowSaveModal(false)}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={handleSaveComposition}
+                disabled={!saveFormData.sens.trim()}
+                className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:bg-gray-300"
+              >
+                Sauvegarder
+              </button>
+            </div>
           </div>
         </div>
       )}
