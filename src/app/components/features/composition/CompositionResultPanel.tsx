@@ -1,3 +1,4 @@
+// components/features/composition/CompositionResultPanel.tsx - Version corrigée
 'use client';
 import React from 'react';
 
@@ -14,9 +15,18 @@ type Props = {
   compositionResult: Result;
   onClose?: () => void;
   onSave?: () => void;
+  // Nouvelles props ajoutées
+  disabled?: boolean;
+  disabledMessage?: string;
 };
 
-export default function CompositionResultPanel({ compositionResult, onClose, onSave }: Props) {
+export default function CompositionResultPanel({
+  compositionResult,
+  onClose,
+  onSave,
+  disabled = false,
+  disabledMessage = 'Action non disponible',
+}: Props) {
   const { sens, confidence, justification, examples, patternWords, source } = compositionResult;
 
   // Fonction pour obtenir l'icône selon la source
@@ -52,6 +62,16 @@ export default function CompositionResultPanel({ compositionResult, onClose, onS
 
   return (
     <div className="bg-white/90 backdrop-blur-sm rounded-xl sm:rounded-2xl shadow-2xl border border-white/30 p-4 sm:p-6 border-l-4 border-l-blue-500 animate-fadeIn">
+      {/* Message d'avertissement si désactivé */}
+      {disabled && (
+        <div className="mb-4 p-3 sm:p-4 bg-gradient-to-r from-orange-50 to-red-50 border border-orange-200 rounded-lg">
+          <div className="flex items-center text-orange-800 text-xs sm:text-sm">
+            <span className="mr-2 text-base">⚠️</span>
+            <span>{disabledMessage}</span>
+          </div>
+        </div>
+      )}
+
       {/* Header avec source et confidence */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 sm:mb-6 space-y-3 sm:space-y-0">
         <div className="flex items-center space-x-3">
@@ -185,13 +205,27 @@ export default function CompositionResultPanel({ compositionResult, onClose, onS
       {/* Actions */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center space-y-2 sm:space-y-0 sm:space-x-3">
         {onSave && (
-          <button
-            className="flex-1 px-4 sm:px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-lg sm:rounded-xl font-medium hover:from-blue-600 hover:to-purple-600 transition-all transform hover:scale-105 shadow-lg hover:shadow-xl flex items-center justify-center space-x-2 text-sm sm:text-base"
-            onClick={onSave}
-          >
-            <span>💾</span>
-            <span>Sauvegarder</span>
-          </button>
+          <div className="flex-1 relative">
+            <button
+              className={`w-full px-4 sm:px-6 py-3 rounded-lg sm:rounded-xl font-medium flex items-center justify-center space-x-2 transition-all transform text-sm sm:text-base ${
+                disabled
+                  ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                  : 'bg-gradient-to-r from-blue-500 to-purple-500 text-white hover:from-blue-600 hover:to-purple-600 shadow-lg hover:shadow-xl hover:scale-105'
+              }`}
+              onClick={disabled ? undefined : onSave}
+              disabled={disabled}
+            >
+              <span>💾</span>
+              <span>Sauvegarder</span>
+            </button>
+
+            {/* Tooltip pour bouton désactivé */}
+            {disabled && (
+              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-black text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                {disabledMessage}
+              </div>
+            )}
+          </div>
         )}
         {onClose && (
           <button

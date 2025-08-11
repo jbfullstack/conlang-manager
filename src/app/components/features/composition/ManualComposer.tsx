@@ -1,3 +1,4 @@
+// components/features/composition/ManualComposer.tsx - Version corrigée
 'use client';
 import React, { useState, KeyboardEvent } from 'react';
 import { Concept } from '@/interfaces/concept.interface';
@@ -9,10 +10,13 @@ type Props = {
   compositionChips: string;
   manualDescription: string;
   setManualDescription: (v: string) => void;
-  manualExamples: string[]; // Changé de string à string[]
-  setManualExamples: (v: string[]) => void; // Changé de string à string[]
+  manualExamples: string[];
+  setManualExamples: (v: string[]) => void;
   onCreateManual: () => void;
   onReset: () => void;
+  // Nouvelles props ajoutées
+  disabled?: boolean;
+  canCreate?: boolean;
 };
 
 export default function ManualComposer({
@@ -20,12 +24,16 @@ export default function ManualComposer({
   selectedConcepts,
   onToggleConcept,
   compositionChips,
+  manualSens,
+  setManualSens,
   manualDescription,
   setManualDescription,
   manualExamples,
   setManualExamples,
   onCreateManual,
   onReset,
+  disabled = false,
+  canCreate = true,
 }: Props) {
   const [currentExample, setCurrentExample] = useState('');
 
@@ -51,6 +59,9 @@ export default function ManualComposer({
     }
   };
 
+  // Déterminer si le bouton de création doit être désactivé
+  const isCreateDisabled = disabled || !canCreate || selectedConcepts.length < 2;
+
   return (
     <div className="space-y-4">
       {/* Composition en cours - manuel */}
@@ -67,6 +78,20 @@ export default function ManualComposer({
             </span>
           </div>
         </div>
+
+        {/* Message d'avertissement si désactivé */}
+        {disabled && (
+          <div className="mb-4 p-3 sm:p-4 bg-gradient-to-r from-red-50 to-orange-50 border border-red-200 rounded-lg sm:rounded-xl">
+            <div className="flex items-center text-red-800 text-xs sm:text-sm">
+              <span className="mr-2 text-base">🚫</span>
+              <span>
+                {!canCreate
+                  ? "Vous n'avez pas la permission de créer des compositions"
+                  : 'Limite quotidienne de compositions atteinte'}
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* Concepts sélectionnés */}
         <div className="mb-4 sm:mb-6 p-4 sm:p-5 bg-gradient-to-r from-blue-50 via-purple-50 to-pink-50 border border-blue-200 rounded-xl sm:rounded-2xl">
@@ -107,6 +132,22 @@ export default function ManualComposer({
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:gap-6">
+          {/* Sens */}
+          <div>
+            <label className="block text-sm sm:text-base font-medium text-gray-700 mb-2 flex items-center">
+              <span className="mr-2 text-lg">📖</span>
+              Sens de la composition
+            </label>
+            <textarea
+              value={manualSens}
+              onChange={(e) => setManualSens(e.target.value)}
+              placeholder="Décrivez le sens de cette composition..."
+              className="w-full border-2 border-gray-300 rounded-lg sm:rounded-xl px-3 sm:px-4 py-2 sm:py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm sm:text-base bg-white/90 backdrop-blur-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              rows={3}
+              disabled={disabled}
+            />
+          </div>
+
           {/* Description */}
           <div>
             <label className="block text-sm sm:text-base font-medium text-gray-700 mb-2 flex items-center">
@@ -116,13 +157,14 @@ export default function ManualComposer({
             <textarea
               value={manualDescription}
               onChange={(e) => setManualDescription(e.target.value)}
-              placeholder="Décrivez le sens et l'usage de cette composition..."
-              className="w-full border-2 border-gray-300 rounded-lg sm:rounded-xl px-3 sm:px-4 py-2 sm:py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm sm:text-base bg-white/90 backdrop-blur-sm"
+              placeholder="Décrivez l'usage de cette composition..."
+              className="w-full border-2 border-gray-300 rounded-lg sm:rounded-xl px-3 sm:px-4 py-2 sm:py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm sm:text-base bg-white/90 backdrop-blur-sm disabled:opacity-50 disabled:cursor-not-allowed"
               rows={3}
+              disabled={disabled}
             />
           </div>
 
-          {/* Exemples - Interface améliorée */}
+          {/* Exemples */}
           <div>
             <label className="block text-sm sm:text-base font-medium text-gray-700 mb-2 flex items-center">
               <span className="mr-2 text-lg">📚</span>
@@ -140,13 +182,14 @@ export default function ManualComposer({
                 onChange={(e) => setCurrentExample(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder="Saisissez un exemple d'usage..."
-                className="flex-1 border-2 border-gray-300 rounded-lg sm:rounded-xl px-3 sm:px-4 py-2 focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all text-sm sm:text-base bg-white/90"
+                className="flex-1 border-2 border-gray-300 rounded-lg sm:rounded-xl px-3 sm:px-4 py-2 focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all text-sm sm:text-base bg-white/90 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={disabled}
               />
               <button
                 onClick={addExample}
-                disabled={!currentExample.trim()}
+                disabled={!currentExample.trim() || disabled}
                 className={`px-3 sm:px-4 py-2 rounded-lg sm:rounded-xl font-medium flex items-center space-x-1 transition-all transform text-sm sm:text-base ${
-                  currentExample.trim()
+                  currentExample.trim() && !disabled
                     ? 'bg-gradient-to-r from-green-500 to-green-600 text-white hover:from-green-600 hover:to-green-700 hover:scale-105 shadow-lg'
                     : 'bg-gray-200 text-gray-500 cursor-not-allowed'
                 }`}
@@ -178,7 +221,8 @@ export default function ManualComposer({
                     </span>
                     <button
                       onClick={() => removeExample(index)}
-                      className="text-red-400 hover:text-red-600 ml-2 opacity-0 group-hover:opacity-100 transition-opacity text-base sm:text-lg flex-shrink-0"
+                      disabled={disabled}
+                      className="text-red-400 hover:text-red-600 ml-2 opacity-0 group-hover:opacity-100 transition-opacity text-base sm:text-lg flex-shrink-0 disabled:opacity-25"
                       title="Supprimer cet exemple"
                     >
                       ×
@@ -194,28 +238,29 @@ export default function ManualComposer({
         <div className="mt-4 sm:mt-6 flex flex-col sm:flex-row items-stretch sm:items-center space-y-2 sm:space-y-0 sm:space-x-3">
           <button
             className={`flex-1 px-4 sm:px-6 py-3 sm:py-4 rounded-lg sm:rounded-xl font-medium flex items-center justify-center space-x-2 transition-all transform text-sm sm:text-base ${
-              selectedConcepts.length >= 2
+              !isCreateDisabled
                 ? 'bg-gradient-to-r from-blue-500 to-purple-500 text-white hover:from-blue-600 hover:to-purple-600 shadow-lg hover:shadow-xl hover:scale-105'
                 : 'bg-gray-200 text-gray-500 cursor-not-allowed'
             }`}
             onClick={onCreateManual}
-            disabled={selectedConcepts.length < 2}
+            disabled={isCreateDisabled}
           >
             <span className="text-lg">🚀</span>
             <span className="hidden sm:inline">Créer Composition Manuelle</span>
             <span className="sm:hidden">Créer</span>
           </button>
           <button
-            className="px-4 sm:px-6 py-3 sm:py-4 border-2 border-gray-300 text-gray-700 rounded-lg sm:rounded-xl font-medium hover:bg-gray-50 hover:border-gray-400 transition-all flex items-center justify-center space-x-2 text-sm sm:text-base"
+            className="px-4 sm:px-6 py-3 sm:py-4 border-2 border-gray-300 text-gray-700 rounded-lg sm:rounded-xl font-medium hover:bg-gray-50 hover:border-gray-400 transition-all flex items-center justify-center space-x-2 text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={onReset}
+            disabled={disabled}
           >
             <span className="text-lg">🔄</span>
             <span>Réinitialiser</span>
           </button>
         </div>
 
-        {/* Info */}
-        {selectedConcepts.length < 2 && (
+        {/* Messages d'info */}
+        {selectedConcepts.length < 2 && !disabled && (
           <div className="mt-4 p-3 sm:p-4 bg-gradient-to-r from-yellow-50 to-orange-50 border border-yellow-200 rounded-lg sm:rounded-xl">
             <div className="flex items-center text-yellow-800 text-xs sm:text-sm">
               <span className="mr-2 text-base">⚠️</span>

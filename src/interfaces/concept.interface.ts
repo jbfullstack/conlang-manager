@@ -1,6 +1,7 @@
 import { Property } from "./property.interface";
 
 export interface Concept {
+  isActive: any;
   id: string;
   mot: string;
   definition: string;
