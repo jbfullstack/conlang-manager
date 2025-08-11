@@ -1,4 +1,5 @@
 # conlang-manager
+
 Personnal language manager
 
 # Install
@@ -18,5 +19,11 @@ npm run dev
 ./scripts/stop.sh
 ```
 
+### Aligne Db with schemas
 
-
+```bash
+npx prisma generate
+npm run db:push
+npm run db:seed
+npx prisma studio
+```

@@ -12,11 +12,14 @@ model User {
   username     String   @unique
   email        String   @unique
   passwordHash String   @map("password_hash")
-  role         UserRole @default(MEMBER)
+  role         UserRole @default(USER)
   isActive     Boolean  @default(true) @map("is_active")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
-
+  
+  // Nouvelles propriétés pour les limites
+  premiumUntil DateTime? @map("premium_until") // Date d'expiration du premium
+  
   // Relations
   conceptsCreated     Concept[]
   combinationsCreated Combination[]
@@ -25,8 +28,63 @@ model User {
   auditLogs          AuditLog[]
   suggestionsReviewed LLMSuggestion[] @relation("ReviewedBy")
   statusChanges      CombinationStatusHistory[]
+  dailyUsage         DailyUsage[] // Nouvelle relation pour tracker l'usage
+  aiRequests         AIRequest[]  // Nouvelle relation pour l'historique des appels IA
 
   @@map("users")
+}
+
+// Nouvelle table pour tracker l'usage quotidien
+model DailyUsage {
+  id               String   @id @default(cuid())
+  userId           String   @map("user_id")
+  date             DateTime @map("date") @db.Date
+  
+  // Compteurs pour les différentes fonctionnalités
+  compositionsCreated    Int @default(0) @map("compositions_created")
+  aiSearchRequests       Int @default(0) @map("ai_search_requests")
+  aiAnalyzeRequests      Int @default(0) @map("ai_analyze_requests")
+  conceptsCreated        Int @default(0) @map("concepts_created")
+  
+  // Coûts estimés (optionnel, pour le monitoring)
+  estimatedCostUsd       Float? @default(0) @map("estimated_cost_usd")
+  
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@map("daily_usage")
+}
+
+// Nouvelle table pour l'historique des appels IA (pour analytics et debugging)
+model AIRequest {
+  id              String   @id @default(cuid())
+  userId          String   @map("user_id")
+  requestType     AIRequestType @map("request_type")
+  
+  // Données de la requête
+  inputData       String   @map("input_data") // JSON string
+  outputData      String?  @map("output_data") // JSON string
+  
+  // Métriques
+  tokensUsed      Int?     @map("tokens_used")
+  costUsd         Float?   @map("cost_usd")
+  responseTime    Int?     @map("response_time") // en millisecondes
+  modelUsed       String?  @map("model_used")
+  
+  // Statut de la requête
+  status          AIRequestStatus @default(SUCCESS)
+  errorMessage    String?  @map("error_message")
+  
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("ai_requests")
 }
 
 model Concept {
@@ -202,10 +260,13 @@ model UserSession {
   @@map("user_sessions")
 }
 
+// ==================== ENUMS ====================
+
 enum UserRole {
-  ADMIN
-  MODERATOR
-  MEMBER
+  USER        // Utilisateur de base (ex-MEMBER)
+  PREMIUM     // Utilisateur premium avec accès IA
+  MODERATOR   // Modérateur
+  ADMIN       // Administrateur
 }
 
 enum CombinationStatus {
@@ -239,4 +300,18 @@ enum Operation {
   INSERT
   UPDATE
   DELETE
+}
+
+enum AIRequestType {
+  AI_SEARCH       // Recherche IA reverse
+  AI_ANALYZE      // Analyse de composition
+  AI_SUGGESTION   // Suggestions automatiques
+  AI_TRANSLATION  // Traduction (pour le futur)
+}
+
+enum AIRequestStatus {
+  SUCCESS
+  ERROR
+  RATE_LIMITED
+  INSUFFICIENT_CREDITS
 }
