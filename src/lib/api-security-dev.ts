@@ -208,185 +208,76 @@ export function withDevAIPermission<T extends any[]>(
   });
 }
 
-// app/api/user/usage/route.ts - Version dev avec données simulées
-import { NextRequest, NextResponse } from 'next/server';
 
-export async function GET(request: NextRequest) {
-  if (process.env.NODE_ENV === 'development') {
-    // En développement, retourner des données simulées
-    const devUser = getDevUser();
-    const usage = DEV_USAGE_SIMULATION[devUser.id as keyof typeof DEV_USAGE_SIMULATION] || {
-      compositionsCreated: 0,
-      aiSearchRequests: 0,
-      aiAnalyzeRequests: 0,
-      conceptsCreated: 0,
-      estimatedCostUsd: 0,
-    };
-    
-    return NextResponse.json({
-      ...usage,
-      date: new Date().toISOString().split('T')[0],
-      user: {
-        id: devUser.id,
-        role: devUser.role,
-      },
-      isDev: true,
-    });
-  }
 
-  // En production, utiliser la vraie logique
-  const { requireAuth } = await import('@/lib/api-security');
-  const { getTodayUsage } = await import('@/lib/usage-tracking');
-  
-  const authResult = await requireAuth(request);
-  
-  if (authResult instanceof NextResponse) {
-    return authResult;
-  }
 
-  try {
-    const usage = await getTodayUsage(authResult.user.id);
-    
-    return NextResponse.json({
-      ...usage,
-      date: new Date().toISOString().split('T')[0],
-      user: {
-        id: authResult.user.id,
-        role: authResult.user.role,
-      }
-    });
-    
-  } catch (error) {
-    console.error('Error fetching user usage:', error);
-    return NextResponse.json({ 
-      error: 'Failed to fetch usage data',
-      code: 'USAGE_FETCH_ERROR' 
-    }, { status: 500 });
-  }
-}
 
-// app/api/compositions/route.ts - Version adaptée dev/prod
-import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
-import { PERMISSIONS } from '@/lib/permissions';
-
-const prisma = new PrismaClient();
-
-export async function POST(request: NextRequest) {
-  // Choisir le bon système selon l'environnement
-  const { withUsageLimit } = process.env.NODE_ENV === 'development' 
-    ? { withUsageLimit: withDevUsageLimit }
-    : await import('@/lib/api-security');
-
-  return withUsageLimit(
-    PERMISSIONS.CREATE_COMPOSITIONS,
-    'compositionsCreated',
-    async (context) => {
-      try {
-        const { pattern, sens, description, statut, source, confidenceScore } = await request.json();
-        
-        // Vérifications spécifiques selon le rôle
-        if (source === 'LLM_SUGGESTED' && !context.hasPermission(PERMISSIONS.USE_AI_SEARCH)) {
-          return NextResponse.json({
-            error: 'AI-suggested compositions require Premium account',
-            code: 'UPGRADE_REQUIRED'
-          }, { status: 403 });
-        }
-        
-        const combination = await prisma.combination.create({
-          data: {
-            pattern: JSON.stringify(pattern),
-            sens,
-            description,
-            statut,
-            source,
-            confidenceScore,
-            createdBy: context.user.id,
-          }
-        });
-
-        return NextResponse.json({
-          ...combination,
-          pattern: JSON.parse(combination.pattern)
-        }, { status: 201 });
-        
-      } catch (error) {
-        console.error('Error creating composition:', error);
-        return NextResponse.json({ 
-          error: 'Failed to create composition',
-          code: 'CREATION_FAILED' 
-        }, { status: 500 });
-      }
-    }
-  )(request);
-}
-
-// app/api/search-reverse/route.ts - Version adaptée dev/prod  
-export async function POST(request: NextRequest) {
-  // Simuler une réponse IA en développement
-  if (process.env.NODE_ENV === 'development') {
-    return withDevAIPermission('AI_SEARCH', async (context) => {
-      const { frenchInput } = await request.json();
+// // app/api/search-reverse/route.ts - Version adaptée dev/prod  
+// export async function POST(request: NextRequest) {
+//   // Simuler une réponse IA en développement
+//   if (process.env.NODE_ENV === 'development') {
+//     return withDevAIPermission('AI_SEARCH', async (context) => {
+//       const { frenchInput } = await request.json();
       
-      if (!frenchInput?.trim()) {
-        return NextResponse.json({
-          error: 'French input is required',
-          code: 'MISSING_INPUT'
-        }, { status: 400 });
-      }
+//       if (!frenchInput?.trim()) {
+//         return NextResponse.json({
+//           error: 'French input is required',
+//           code: 'MISSING_INPUT'
+//         }, { status: 400 });
+//       }
 
-      // Simuler un délai d'API
-      await new Promise(resolve => setTimeout(resolve, 800 + Math.random() * 1200));
+//       // Simuler un délai d'API
+//       await new Promise(resolve => setTimeout(resolve, 800 + Math.random() * 1200));
 
-      // Réponse simulée intelligente selon l'input
-      const mockResults: Record<string, any> = {
-        'eau rapide': {
-          sens: 'go tomu',
-          confidence: 0.92,
-          justification: 'Combinaison évidente : go (eau) + tomu (vitesse)',
-          source: 'llm',
-          examples: ['cascade', 'torrent', 'rivière rapide'],
-        },
-        'beauté nocturne': {
-          sens: 'nox kala',
-          confidence: 0.85,
-          justification: 'Beauté de la nuit : nox (nuit) + kala (beauté)',
-          source: 'llm',
-          examples: ['ciel étoilé', 'lune brillante'],
-        },
-        'lumière dorée': {
-          sens: 'sol kala',
-          confidence: 0.88,
-          justification: 'Beauté solaire : sol (soleil) + kala (beauté)',
-          source: 'llm',
-          examples: ['coucher de soleil', 'aube dorée'],
-        },
-      };
+//       // Réponse simulée intelligente selon l'input
+//       const mockResults: Record<string, any> = {
+//         'eau rapide': {
+//           sens: 'go tomu',
+//           confidence: 0.92,
+//           justification: 'Combinaison évidente : go (eau) + tomu (vitesse)',
+//           source: 'llm',
+//           examples: ['cascade', 'torrent', 'rivière rapide'],
+//         },
+//         'beauté nocturne': {
+//           sens: 'nox kala',
+//           confidence: 0.85,
+//           justification: 'Beauté de la nuit : nox (nuit) + kala (beauté)',
+//           source: 'llm',
+//           examples: ['ciel étoilé', 'lune brillante'],
+//         },
+//         'lumière dorée': {
+//           sens: 'sol kala',
+//           confidence: 0.88,
+//           justification: 'Beauté solaire : sol (soleil) + kala (beauté)',
+//           source: 'llm',
+//           examples: ['coucher de soleil', 'aube dorée'],
+//         },
+//       };
 
-      const key = Object.keys(mockResults).find(k => 
-        frenchInput.toLowerCase().includes(k.toLowerCase())
-      );
+//       const key = Object.keys(mockResults).find(k => 
+//         frenchInput.toLowerCase().includes(k.toLowerCase())
+//       );
       
-      const result = key ? mockResults[key] : {
-        sens: 'Combinaison inconnue',
-        confidence: 0.3,
-        justification: `Aucune correspondance claire trouvée pour "${frenchInput}"`,
-        source: 'llm',
-        examples: [],
-      };
+//       const result = key ? mockResults[key] : {
+//         sens: 'Combinaison inconnue',
+//         confidence: 0.3,
+//         justification: `Aucune correspondance claire trouvée pour "${frenchInput}"`,
+//         source: 'llm',
+//         examples: [],
+//       };
 
-      console.log(`🤖 DEV AI Search: ${context.user.username} searched for "${frenchInput}" -> ${result.sens}`);
+//       console.log(`🤖 DEV AI Search: ${context.user.username} searched for "${frenchInput}" -> ${result.sens}`);
 
-      return NextResponse.json(result);
-    })(request);
-  }
+//       return NextResponse.json(result);
+//     })(request);
+//   }
 
-  // En production, utiliser la vraie logique IA
-  const { withAIPermission } = await import('@/lib/api-security');
-  return withAIPermission('AI_SEARCH', async (context) => {
-    // Votre vraie logique IA ici
-    const { frenchInput } = await request.json();
-    // ... vraie implémentation
-    return NextResponse.json({ sens: 'Production AI result' });
-  })(request);
-}
+//   // En production, utiliser la vraie logique IA
+//   const { withAIPermission } = await import('@/lib/api-security');
+//   return withAIPermission('AI_SEARCH', async (context) => {
+//     // Votre vraie logique IA ici
+//     const { frenchInput } = await request.json();
+//     // ... vraie implémentation
+//     return NextResponse.json({ sens: 'Production AI result' });
+//   })(request);
+// }

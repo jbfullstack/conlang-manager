@@ -7,6 +7,8 @@ type Props = {
   concepts: Concept[];
   selectedConcepts: Concept[];
   onToggleConcept: (c: Concept) => void;
+  manualSens: string;
+  setManualSens: (v: string) => void;
   compositionChips: string;
   manualDescription: string;
   setManualDescription: (v: string) => void;

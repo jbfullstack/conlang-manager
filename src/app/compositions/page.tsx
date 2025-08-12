@@ -10,7 +10,7 @@ import CompositionResultPanel from '@/app/components/features/composition/Compos
 import { useConcepts } from '@/hooks/useConcepts';
 import { useCompositions } from '@/hooks/useCompositions';
 import SaveModal from '../components/features/composition/SaveModal';
-import { useAuth, useCompositionPermissions } from '@/hooks/usePermissions';
+import { useAuth, useCompositionPermissions, useDailyUsage } from '@/hooks/usePermissions';
 
 type CompositionResult = {
   sens: string;
@@ -25,6 +25,7 @@ type CompositionResult = {
 
 export default function CompositionPage() {
   const { user, role, isAuthenticated, isLoading, hasRole, hasPermission } = useAuth();
+  const { incrementComposition, refreshUsage } = useDailyUsage();
   const {
     canUseAISearch,
     canUseAIAnalyze,
@@ -33,6 +34,7 @@ export default function CompositionPage() {
     remainingCompositions,
     hasReachedCompositionLimit,
   } = useCompositionPermissions();
+
   // Mode actif
   const [mode, setMode] = useState<'manual' | 'ai-search' | 'ai-analyze'>('manual');
 
@@ -58,7 +60,7 @@ export default function CompositionPage() {
   const [manualDescription, setManualDescription] = useState('');
   const [manualExamples, setManualExamples] = useState<string[]>([]);
 
-  const { communityComps, loading: compsLoading } = useCompositions();
+  const { communityComps, loading: compsLoading, refreshCompositions } = useCompositions();
 
   // Toggle concept dans la composition en cours
   const toggleConceptInManual = (c: Concept) => {
@@ -69,6 +71,22 @@ export default function CompositionPage() {
       return [...prev, c];
     });
   };
+
+  const handleUsePatternFromComp = useCallback(
+    (ids: string[]) => {
+      const mapById = new Map<string, Concept>();
+      concepts.forEach((cc) => mapById.set(cc.id, cc));
+      const toAdd = ids.map((id) => mapById.get(id)).filter(Boolean) as Concept[];
+      setSelectedConcepts((prev) => {
+        const merged = [...prev];
+        toAdd.forEach((cc) => {
+          if (!merged.find((x) => x.id === cc.id) && merged.length < 4) merged.push(cc);
+        });
+        return merged;
+      });
+    },
+    [concepts],
+  );
 
   // Composition en cours (affichage)
   const compositionChips = useMemo(
@@ -147,7 +165,64 @@ export default function CompositionPage() {
     }
   };
 
-  // Sauvegarder composition
+  // CORRECTION: Créer Composition Manuelle avec incrementComposition
+  const createManualComposition = async () => {
+    if (selectedConcepts.length < 2) {
+      alert('Sélectionnez au moins 2 concepts pour une composition manuelle.');
+      return;
+    }
+    const pattern = selectedConcepts.map((c) => c.id);
+    const payload = {
+      pattern,
+      sens: manualSens,
+      description: manualDescription,
+      examples: manualExamples,
+      statut: 'PROPOSITION',
+      source: 'MANUAL',
+      confidenceScore: 0,
+    };
+    try {
+      console.log('📝 Creating manual composition...');
+      const resp = await fetch('/api/compositions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (resp.ok) {
+        alert('Composition Manuelle créée');
+        setSelectedConcepts([]);
+        setManualSens('');
+        setManualDescription('');
+        setManualExamples([]);
+
+        console.log('✅ Composition created, now incrementing usage...');
+
+        // INCRÉMENTER LE COMPTEUR
+        try {
+          await incrementComposition();
+          console.log('✅ Usage incremented successfully! Le compteur devrait se mettre à jour !');
+        } catch (error) {
+          console.error('❌ Error incrementing usage:', error);
+        }
+
+        // RAFRAÎCHIR LA LISTE (optionnel)
+        try {
+          await refreshCompositions();
+          console.log('✅ Compositions list refreshed');
+        } catch (error) {
+          console.warn('⚠️ Could not refresh compositions list:', error);
+        }
+      } else {
+        const err = await resp.json().catch(() => ({} as any));
+        alert('Erreur création: ' + (err?.error ?? 'Erreur inconnue'));
+      }
+    } catch (error) {
+      console.error('❌ Erreur réseau lors de la création:', error);
+      alert('Erreur réseau lors de la création');
+    }
+  };
+
+  // FONCTION HANDLESAVECOMPOSITION IDENTIQUE :
   const handleSaveComposition = async () => {
     const pattern = selectedConcepts.map((c) => c.id);
     const payload = {
@@ -169,6 +244,24 @@ export default function CompositionPage() {
         setShowSaveModal(false);
         setSelectedConcepts([]);
         setCompositionResult(null);
+
+        console.log('✅ Composition created, now incrementing usage...');
+
+        // INCRÉMENTER LE COMPTEUR
+        try {
+          await incrementComposition();
+          console.log('✅ Usage incremented successfully!');
+        } catch (error) {
+          console.error('❌ Error incrementing usage:', error);
+        }
+
+        // RAFRAÎCHIR LA LISTE (optionnel)
+        try {
+          await refreshCompositions();
+          console.log('✅ Compositions list refreshed');
+        } catch (error) {
+          console.warn('⚠️ Could not refresh compositions list:', error);
+        }
       } else {
         const err = await resp.json().catch(() => ({} as any));
         alert('Erreur sauvegarde: ' + (err?.error ?? 'Erreur inconnue'));
@@ -177,59 +270,6 @@ export default function CompositionPage() {
       alert('Erreur sauvegarde');
     }
   };
-
-  // Créer Composition Manuelle
-  const createManualComposition = async () => {
-    if (selectedConcepts.length < 2) {
-      alert('Sélectionnez au moins 2 concepts pour une composition manuelle.');
-      return;
-    }
-    const pattern = selectedConcepts.map((c) => c.id);
-    const payload = {
-      pattern,
-      sens: manualSens,
-      description: manualDescription,
-      examples: manualExamples, // Envoi du tableau d'exemples
-      statut: 'PROPOSITION',
-      source: 'MANUAL',
-      confidenceScore: 0,
-    };
-    try {
-      const resp = await fetch('/api/compositions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      if (resp.ok) {
-        alert('Composition Manuelle créée');
-        setSelectedConcepts([]);
-        setManualSens('');
-        setManualDescription('');
-        setManualExamples([]);
-      } else {
-        const err = await resp.json().catch(() => ({} as any));
-        alert('Erreur création: ' + (err?.error ?? 'Erreur inconnue'));
-      }
-    } catch {
-      alert('Erreur réseau lors de la création');
-    }
-  };
-
-  const handleUsePatternFromComp = useCallback(
-    (ids: string[]) => {
-      const mapById = new Map<string, Concept>();
-      concepts.forEach((cc) => mapById.set(cc.id, cc));
-      const toAdd = ids.map((id) => mapById.get(id)).filter(Boolean) as Concept[];
-      setSelectedConcepts((prev) => {
-        const merged = [...prev];
-        toAdd.forEach((cc) => {
-          if (!merged.find((x) => x.id === cc.id) && merged.length < 4) merged.push(cc);
-        });
-        return merged;
-      });
-    },
-    [concepts],
-  );
 
   if (isLoading) return <div>Chargement...</div>;
   if (!isAuthenticated) return <div>Pas connecté</div>;
