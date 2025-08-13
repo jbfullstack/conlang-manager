@@ -21,22 +21,17 @@ interface UnifiedUser {
   username?: string;
 }
 
-// Hook dev auth simplifié
+// REMETTRE LA FONCTION useDevAuth ICI (pas dans dev-auth.ts)
 function useDevAuth() {
-  const [currentUser, setCurrentUser] = useState<UnifiedUser>({
-    id: 'cme6wmg500002k5m41d0swmwh',
-    email: 'bob@conlang.local',
-    name: 'bob',
-    role: 'PREMIUM',
-    username: 'bob',
-  });
+  const [currentUser, setCurrentUser] = useState<UnifiedUser | null>(null);
   const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
     setIsClient(true);
+    
     if (typeof window !== 'undefined') {
       try {
-        const savedUser = localStorage.getItem('dev-user') || 'premium';
+        // Définir users DANS le useEffect pour éviter la dépendance
         const users: Record<string, UnifiedUser> = {
           admin: {
             id: 'cme6wmg4t0000k5m4wwwowp5c',
@@ -67,21 +62,52 @@ function useDevAuth() {
             username: 'charlie',
           },
         };
+
+        const savedUser = localStorage.getItem('dev-user') || 'premium';
+        console.log('🔧 useDevAuth reading localStorage:', savedUser);
         
         if (savedUser in users) {
-          setCurrentUser(users[savedUser]);
+          const selectedUser = users[savedUser];
+          console.log('🔧 useDevAuth setting user to:', selectedUser.name, selectedUser.id);
+          setCurrentUser(selectedUser);
+        } else {
+          console.log('🔧 useDevAuth fallback to premium');
+          setCurrentUser(users.premium);
         }
       } catch (error) {
         console.warn('Dev auth error:', error);
+        // Fallback en cas d'erreur
+        setCurrentUser({
+          id: 'cme6wmg500002k5m41d0swmwh',
+          email: 'bob@conlang.local',
+          name: 'bob',
+          role: 'PREMIUM',
+          username: 'bob',
+        });
       }
     }
-  }, []);
+  }, []); // Vide : pas de dépendances = pas de boucle
+
+  const fallbackUser: UnifiedUser = {
+    id: 'cme6wmg500002k5m41d0swmwh',
+    email: 'bob@conlang.local',
+    name: 'bob',
+    role: 'PREMIUM',
+    username: 'bob',
+  };
+
+  console.log('🔧 useDevAuth returning:', {
+    currentUser: currentUser?.name,
+    currentUserId: currentUser?.id,
+    fallbackUsed: !currentUser,
+    isLoading: !isClient || !currentUser
+  });
 
   return {
-    user: currentUser,
-    role: currentUser.role as Role,
+    user: currentUser || fallbackUser,
+    role: (currentUser?.role || 'PREMIUM') as Role,
     isAuthenticated: true,
-    isLoading: !isClient,
+    isLoading: !isClient || !currentUser,
   };
 }
 
@@ -162,117 +188,131 @@ export function usePermissions() {
 }
 
 // Hook pour l'usage quotidien (version simplifiée pour dev)
-export function useDailyUsage() {
-  const { user, isAuthenticated, role } = useAuth();
-  const [usage, setUsage] = useState({
-    compositionsCreated: 0,
-    aiSearchRequests: 0,
-    aiAnalyzeRequests: 0,
-    conceptsCreated: 0,
-    estimatedCostUsd: 0,
-    isLoading: true,
-  });
+// export function useDailyUsage() {
+//   const { user, isAuthenticated, role } = useAuth();
+//   const [usage, setUsage] = useState({
+//     compositionsCreated: 0,
+//     aiSearchRequests: 0,
+//     aiAnalyzeRequests: 0,
+//     conceptsCreated: 0,
+//     estimatedCostUsd: 0,
+//     isLoading: true,
+//   });
 
-  const fetchUsage = useCallback(async () => {
-    if (!isAuthenticated || !user?.id) {
-      setUsage(prev => ({ ...prev, isLoading: false }));
-      return;
-    }
+//   // AJOUT DEBUG : Log à chaque changement de usage
+//   useEffect(() => {
+//     console.log('🔢 useDailyUsage state changed:', usage);
+//   }, [usage]);
 
-    try {
-      const response = await fetch(`/api/user/usage?userId=${user.id}`);
-      if (response.ok) {
-        const data = await response.json();
-        setUsage({ ...data, isLoading: false });
-      } else {
-        const mockUsage = getMockUsage(role as Role);
-        setUsage({ ...mockUsage, isLoading: false });
-      }
-    } catch (error) {
-      console.error('Erreur fetch usage:', error);
-      const mockUsage = getMockUsage(role as Role);
-      setUsage({ ...mockUsage, isLoading: false });
-    }
-  }, [isAuthenticated, user?.id, role]);
-
-  useEffect(() => {
-    fetchUsage();
-  }, [fetchUsage]);
-
-  const refreshUsage = async () => {
-    if (!isAuthenticated || !user?.id) return;
+//   const fetchUsage = useCallback(async () => {
+//     console.log('🔄 fetchUsage called for user:', user?.id);
     
-    setUsage(prev => ({ ...prev, isLoading: true }));
-    await fetchUsage();
-  };
+//     if (!isAuthenticated || !user?.id) {
+//       console.log('❌ fetchUsage: Not authenticated or no user ID');
+//       setUsage(prev => ({ ...prev, isLoading: false }));
+//       return;
+//     }
 
-  // AJOUTEZ CETTE FONCTION :
-  const incrementUsage = async (type: 'compositions' | 'aiSearch' | 'aiAnalyze' | 'concepts') => {
-    if (!isAuthenticated || !user?.id) {
-      console.warn('⚠️ incrementUsage: User not authenticated or no user ID');
-      return;
-    }
+//     try {
+//       console.log('📡 Fetching usage from API...');
+//       const response = await fetch(`/api/user/usage?userId=${user.id}`);
+//       console.log('📡 API response status:', response.status);
+      
+//       if (response.ok) {
+//         const data = await response.json();
+//         console.log('✅ API returned usage data:', data);
+//         setUsage({ ...data, isLoading: false });
+//       } else {
+//         console.log('⚠️ API error, using mock data');
+//         const mockUsage = getMockUsage(role as Role);
+//         console.log('⚠️ Mock usage data:', mockUsage);
+//         setUsage({ ...mockUsage, isLoading: false });
+//       }
+//     } catch (error) {
+//       console.error('❌ Error fetching usage:', error);
+//       const mockUsage = getMockUsage(role as Role);
+//       setUsage({ ...mockUsage, isLoading: false });
+//     }
+//   }, [isAuthenticated, user?.id, role]);
+
+//   useEffect(() => {
+//     fetchUsage();
+//   }, [fetchUsage]);
+
+//   const refreshUsage = async () => {
+//     if (!isAuthenticated || !user?.id) return;
     
-    console.log('🚀 incrementUsage called with:', { type, userId: user.id });
+//     setUsage(prev => ({ ...prev, isLoading: true }));
+//     await fetchUsage();
+//   };
+
+//   const incrementUsage = async (type: 'compositions' | 'aiSearch' | 'aiAnalyze' | 'concepts') => {
+//     if (!isAuthenticated || !user?.id) {
+//       console.warn('⚠️ incrementUsage: User not authenticated or no user ID');
+//       return;
+//     }
     
-    try {
-      const url = `/api/user/usage?userId=${user.id}`;
-      const body = { increment: type };
+//     console.log('🚀 incrementUsage called with:', { type, userId: user.id });
+//     console.log('🚀 Current usage BEFORE increment:', usage);
+    
+//     try {
+//       const url = `/api/user/usage?userId=${user.id}`;
+//       const body = { increment: type };
       
-      console.log('🚀 Making POST request to:', url, 'with body:', body);
+//       console.log('🚀 Making POST request to:', url, 'with body:', body);
       
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      });
+//       const response = await fetch(url, {
+//         method: 'POST',
+//         headers: { 'Content-Type': 'application/json' },
+//         body: JSON.stringify(body)
+//       });
       
-      console.log('🚀 Response status:', response.status);
+//       console.log('🚀 POST Response status:', response.status);
       
-      if (response.ok) {
-        const updatedUsage = await response.json();
-        console.log('✅ Updated usage from API:', updatedUsage);
+//       if (response.ok) {
+//         const updatedUsage = await response.json();
+//         console.log('✅ Updated usage from API:', updatedUsage);
+//         console.log('✅ Previous local usage:', usage);
         
-        setUsage(prev => {
-          const newUsage = {
-            ...prev,
-            compositionsCreated: updatedUsage.compositionsCreated,
-            aiSearchRequests: updatedUsage.aiSearchRequests,
-            aiAnalyzeRequests: updatedUsage.aiAnalyzeRequests,
-            conceptsCreated: updatedUsage.conceptsCreated,
-            estimatedCostUsd: updatedUsage.estimatedCostUsd,
-          };
-          console.log('✅ Local state updated:', newUsage);
-          return newUsage;
-        });
-      } else {
-        const errorText = await response.text();
-        console.error('❌ API response not ok:', response.status, errorText);
-      }
-    } catch (error) {
-      console.error('❌ Error in incrementUsage:', error);
-    }
-  };
+//         setUsage(prev => {
+//           const newUsage = {
+//             ...prev,
+//             compositionsCreated: updatedUsage.compositionsCreated,
+//             aiSearchRequests: updatedUsage.aiSearchRequests,
+//             aiAnalyzeRequests: updatedUsage.aiAnalyzeRequests,
+//             conceptsCreated: updatedUsage.conceptsCreated,
+//             estimatedCostUsd: updatedUsage.estimatedCostUsd,
+//           };
+//           console.log('✅ New local usage AFTER setUsage:', newUsage);
+//           return newUsage;
+//         });
+//       } else {
+//         const errorText = await response.text();
+//         console.error('❌ API POST response not ok:', response.status, errorText);
+//       }
+//     } catch (error) {
+//       console.error('❌ Error in incrementUsage:', error);
+//     }
+//   };
 
-  // AJOUTEZ CES FONCTIONS :
-  const incrementComposition = () => {
-    console.log('🎯 incrementComposition called');
-    return incrementUsage('compositions');
-  };
+//   const incrementComposition = () => {
+//     console.log('🎯 incrementComposition called');
+//     return incrementUsage('compositions');
+//   };
 
-  const incrementAISearch = () => incrementUsage('aiSearch');
-  const incrementAIAnalyze = () => incrementUsage('aiAnalyze');
-  const incrementConcept = () => incrementUsage('concepts');
+//   const incrementAISearch = () => incrementUsage('aiSearch');
+//   const incrementAIAnalyze = () => incrementUsage('aiAnalyze');
+//   const incrementConcept = () => incrementUsage('concepts');
 
-  return {
-    ...usage,
-    refreshUsage,
-    incrementComposition,
-    incrementAISearch,
-    incrementAIAnalyze,
-    incrementConcept,
-  };
-}
+//   return {
+//     ...usage,
+//     refreshUsage,
+//     incrementComposition,
+//     incrementAISearch,
+//     incrementAIAnalyze,
+//     incrementConcept,
+//   };
+// }
 
 // Données d'usage mockées selon le rôle
 function getMockUsage(role: Role) {
@@ -320,17 +360,21 @@ function getMockUsage(role: Role) {
   }
 }
 
-// Hook spécialisé pour les compositions
-export function useCompositionPermissions() {
+export function useCompositionPermissions(compositionsCreatedParam?: number) {
   const { can, canModify, role, isAuthenticated } = usePermissions();
-  
-  // CHANGEMENT: Utiliser directement useDailyUsage au lieu de dupliquer
-  const { compositionsCreated, isLoading: usageLoading } = useDailyUsage();
-  
+
   const limits = role ? FEATURE_FLAGS[role] : null;
-  const hasReachedCompositionLimit = limits && limits.maxCompositionsPerDay > 0 
-    ? compositionsCreated >= limits.maxCompositionsPerDay 
-    : false;
+  const compositionsCreated = compositionsCreatedParam ?? 0;
+
+  const hasReachedCompositionLimit =
+    !!limits && limits.maxCompositionsPerDay > 0
+      ? compositionsCreated >= limits.maxCompositionsPerDay
+      : false;
+
+  const remainingCompositions =
+    limits && limits.maxCompositionsPerDay > 0
+      ? Math.max(0, limits.maxCompositionsPerDay - compositionsCreated)
+      : -1; // -1 = illimité
 
   return {
     canView: can(PERMISSIONS.VIEW_COMPOSITIONS),
@@ -339,33 +383,17 @@ export function useCompositionPermissions() {
     canUseAISearch: can(PERMISSIONS.USE_AI_SEARCH),
     canUseAIAnalyze: can(PERMISSIONS.USE_AI_ANALYZE),
     canModerate: can(PERMISSIONS.MODERATE_COMPOSITIONS),
-    
+
     limits,
     hasReachedCompositionLimit,
-    
-    // CHANGEMENT: Calcul en temps réel basé sur useDailyUsage
-    remainingCompositions: limits && limits.maxCompositionsPerDay > 0 
-      ? Math.max(0, limits.maxCompositionsPerDay - compositionsCreated)
-      : -1,
-    
-    // Exposer les données d'usage
+    remainingCompositions,
     compositionsToday: compositionsCreated,
-    loadingCount: usageLoading,
-    
-    canEdit: (compositionOwnerId: string) => 
-      canModify(
-        compositionOwnerId, 
-        PERMISSIONS.EDIT_OWN_COMPOSITIONS, 
-        PERMISSIONS.EDIT_ALL_COMPOSITIONS
-      ),
-    
-    canDelete: (compositionOwnerId: string) => 
-      canModify(
-        compositionOwnerId, 
-        PERMISSIONS.DELETE_OWN_COMPOSITIONS, 
-        PERMISSIONS.DELETE_ALL_COMPOSITIONS
-      ),
-    
+    loadingCount: false,
+
+    canEdit: (ownerId: string) =>
+      canModify(ownerId, PERMISSIONS.EDIT_OWN_COMPOSITIONS, PERMISSIONS.EDIT_ALL_COMPOSITIONS),
+    canDelete: (ownerId: string) =>
+      canModify(ownerId, PERMISSIONS.DELETE_OWN_COMPOSITIONS, PERMISSIONS.DELETE_ALL_COMPOSITIONS),
     isAuthenticated,
   };
 }

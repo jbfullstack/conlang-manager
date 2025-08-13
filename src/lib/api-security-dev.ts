@@ -187,25 +187,27 @@ export function withDevUsageLimit<T extends any[]>(
 }
 
 // Version dev des requêtes IA
-export function withDevAIPermission<T extends any[]>(
-  aiType: 'AI_SEARCH' | 'AI_ANALYZE',
+export function withDevAIPermission<T extends unknown[]>(
   handler: (context: SecurityContext, ...args: T) => Promise<NextResponse>
 ) {
-  const permission = aiType === 'AI_SEARCH' ? 'USE_AI_SEARCH' : 'USE_AI_ANALYZE';
-  const usageType = aiType === 'AI_SEARCH' ? 'aiSearchRequests' : 'aiAnalyzeRequests';
-  
-  return withDevUsageLimit(permission as Permission, usageType, async (context, ...args) => {
-    const startTime = Date.now();
-    const response = await handler(context, ...args);
-    const endTime = Date.now();
+  return async (request: NextRequest, ...args: T): Promise<NextResponse> => {
+    try {
+      const authResult = await requireAuthDev(request);
+      
+      if (authResult instanceof NextResponse) {
+        return authResult;
+      }
 
-    // En dev, logger la requête IA simulée
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`🤖 DEV AI: ${context.user.username} used ${aiType} - took ${endTime - startTime}ms`);
+      // CORRECTION : Cast explicite pour résoudre l'erreur TypeScript
+      return await handler(authResult, ...(args as T));
+    } catch (error) {
+      console.error('Dev security error:', error);
+      return NextResponse.json({
+        error: 'Internal dev security error',
+        code: 'DEV_ERROR'
+      }, { status: 500 });
     }
-
-    return response;
-  });
+  };
 }
 
 

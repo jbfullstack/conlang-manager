@@ -10,7 +10,8 @@ import CompositionResultPanel from '@/app/components/features/composition/Compos
 import { useConcepts } from '@/hooks/useConcepts';
 import { useCompositions } from '@/hooks/useCompositions';
 import SaveModal from '../components/features/composition/SaveModal';
-import { useAuth, useCompositionPermissions, useDailyUsage } from '@/hooks/usePermissions';
+import { useAuth, useCompositionPermissions } from '@/hooks/usePermissions';
+import { useDailyUsage } from '@/hooks/useDailyUsage';
 
 type CompositionResult = {
   sens: string;
@@ -24,8 +25,13 @@ type CompositionResult = {
 };
 
 export default function CompositionPage() {
-  const { user, role, isAuthenticated, isLoading, hasRole, hasPermission } = useAuth();
-  const { incrementComposition, refreshUsage } = useDailyUsage();
+  const { user, role, isAuthenticated, isLoading: authLoading } = useAuth();
+  const userId = user?.id;
+
+  // ✅ brancher useDailyUsage sur l'id réel
+  const { incrementComposition, refreshUsage, compositionsCreated, usage, swrKey } =
+    useDailyUsage(userId);
+
   const {
     canUseAISearch,
     canUseAIAnalyze,
@@ -33,7 +39,18 @@ export default function CompositionPage() {
     limits,
     remainingCompositions,
     hasReachedCompositionLimit,
-  } = useCompositionPermissions();
+  } = useCompositionPermissions(compositionsCreated);
+
+  // DEBUG CRITIQUE : Vérifier quel utilisateur est affiché
+  console.log('🧪 INTERFACE USER DEBUG:', {
+    userId,
+    userName: user?.name,
+    userRole: user?.role,
+    compositionsCreated,
+    usage,
+    maxCompositionsPerDay: limits?.maxCompositionsPerDay,
+    swrKey,
+  });
 
   // Mode actif
   const [mode, setMode] = useState<'manual' | 'ai-search' | 'ai-analyze'>('manual');
@@ -61,6 +78,23 @@ export default function CompositionPage() {
   const [manualExamples, setManualExamples] = useState<string[]>([]);
 
   const { communityComps, loading: compsLoading, refreshCompositions } = useCompositions();
+
+  const refreshAfterCreation = async () => {
+    setSelectedConcepts([]);
+    setManualSens('');
+    setManualDescription('');
+    setManualExamples([]);
+
+    try {
+      // ✅ forcer l’uid ici -> pas de no-op si auth vient juste d’arriver
+      await incrementComposition(userId!);
+      await refreshUsage();
+      await refreshCompositions();
+    } catch (error) {
+      console.error('❌ Error in refreshAfterCreation:', error);
+      alert((error as Error).message);
+    }
+  };
 
   // Toggle concept dans la composition en cours
   const toggleConceptInManual = (c: Concept) => {
@@ -189,29 +223,7 @@ export default function CompositionPage() {
         body: JSON.stringify(payload),
       });
       if (resp.ok) {
-        alert('Composition Manuelle créée');
-        setSelectedConcepts([]);
-        setManualSens('');
-        setManualDescription('');
-        setManualExamples([]);
-
-        console.log('✅ Composition created, now incrementing usage...');
-
-        // INCRÉMENTER LE COMPTEUR
-        try {
-          await incrementComposition();
-          console.log('✅ Usage incremented successfully! Le compteur devrait se mettre à jour !');
-        } catch (error) {
-          console.error('❌ Error incrementing usage:', error);
-        }
-
-        // RAFRAÎCHIR LA LISTE (optionnel)
-        try {
-          await refreshCompositions();
-          console.log('✅ Compositions list refreshed');
-        } catch (error) {
-          console.warn('⚠️ Could not refresh compositions list:', error);
-        }
+        await refreshAfterCreation();
       } else {
         const err = await resp.json().catch(() => ({} as any));
         alert('Erreur création: ' + (err?.error ?? 'Erreur inconnue'));
@@ -240,28 +252,7 @@ export default function CompositionPage() {
         body: JSON.stringify(payload),
       });
       if (resp.ok) {
-        alert('Composition sauvegardée');
-        setShowSaveModal(false);
-        setSelectedConcepts([]);
-        setCompositionResult(null);
-
-        console.log('✅ Composition created, now incrementing usage...');
-
-        // INCRÉMENTER LE COMPTEUR
-        try {
-          await incrementComposition();
-          console.log('✅ Usage incremented successfully!');
-        } catch (error) {
-          console.error('❌ Error incrementing usage:', error);
-        }
-
-        // RAFRAÎCHIR LA LISTE (optionnel)
-        try {
-          await refreshCompositions();
-          console.log('✅ Compositions list refreshed');
-        } catch (error) {
-          console.warn('⚠️ Could not refresh compositions list:', error);
-        }
+        await refreshAfterCreation();
       } else {
         const err = await resp.json().catch(() => ({} as any));
         alert('Erreur sauvegarde: ' + (err?.error ?? 'Erreur inconnue'));
@@ -271,11 +262,27 @@ export default function CompositionPage() {
     }
   };
 
-  if (isLoading) return <div>Chargement...</div>;
-  if (!isAuthenticated) return <div>Pas connecté</div>;
+  if (authLoading) return <div>Chargement...</div>;
+  if (!isAuthenticated || !userId) return <div>Pas connecté</div>;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50">
+      {/* Bandeau debug */}
+      <div className="bg-yellow-100 border border-yellow-300 p-4 m-4 rounded text-sm">
+        <strong>🧪 DEBUG INFO:</strong>
+        <br />
+        User: {user?.name} ({userId})<br />
+        Role: {user?.role}
+        <br />
+        Compositions Created (SWR): {compositionsCreated}
+        <br />
+        Remaining (SWR+limits): {remainingCompositions}
+        <br />
+        Max per day: {limits?.maxCompositionsPerDay}
+        <br />
+        SWR key: {swrKey || 'null'}
+      </div>
+
       <div className="max-w-7xl mx-auto p-3 sm:p-6 space-y-4 sm:space-y-6">
         {/* HEADER avec TABS sécurisés */}
         <div className="bg-white/80 backdrop-blur-sm rounded-xl sm:rounded-2xl shadow-xl border border-white/20 p-4 sm:p-6">
@@ -310,7 +317,7 @@ export default function CompositionPage() {
                 >
                   <span className="mr-1">⚡</span>
                   <span className="font-medium">
-                    {remainingCompositions === -1 ? '∞' : remainingCompositions}
+                    {remainingCompositions === -1 ? '∞' : String(remainingCompositions)}
                   </span>
                   <span className="hidden sm:inline ml-1">restantes</span>
                 </div>
@@ -509,8 +516,8 @@ export default function CompositionPage() {
                     setManualExamples([]);
                   }}
                   // Passer les infos de permissions au composant
-                  disabled={hasReachedCompositionLimit}
-                  canCreate={canCreate}
+                  disabled={hasReachedCompositionLimit || !userId}
+                  canCreate={canCreate && !!userId}
                 />
               )}
 

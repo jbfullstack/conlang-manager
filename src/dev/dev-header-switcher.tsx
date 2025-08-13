@@ -1,35 +1,80 @@
-// components/dev/DevHeaderSwitcher.tsx - Version simplifiée
+// components/dev/DevHeaderSwitcher.tsx - Version unifiée avec usePermissions.ts
 'use client';
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/usePermissions';
 
+// CORRECTION : Utiliser les mêmes données que usePermissions.ts
 const DEV_USERS = {
-  admin: { name: 'admin', role: 'ADMIN', icon: '👑', email: 'admin@conlang.local' },
-  user: { name: 'alice', role: 'USER', icon: '👤', email: 'alice@conlang.local' },
-  premium: { name: 'bob', role: 'PREMIUM', icon: '💎', email: 'bob@conlang.local' },
-  moderator: { name: 'charlie', role: 'MODERATOR', icon: '👮', email: 'charlie@conlang.local' },
+  admin: {
+    name: 'admin', // ← NAME (pas username)
+    role: 'ADMIN',
+    icon: '👑',
+    email: 'admin@conlang.local',
+    id: 'cme6wmg4t0000k5m4wwwowp5c', // ← ID réel de la DB
+  },
+  user: {
+    name: 'alice', // ← NAME (pas username)
+    role: 'USER',
+    icon: '👤',
+    email: 'alice@conlang.local',
+    id: 'cme6wmg500001k5m4be23k1gk', // ← ID réel de la DB
+  },
+  premium: {
+    name: 'bob', // ← NAME (pas username)
+    role: 'PREMIUM',
+    icon: '💎',
+    email: 'bob@conlang.local',
+    id: 'cme6wmg500002k5m41d0swmwh', // ← ID réel de la DB
+  },
+  moderator: {
+    name: 'charlie', // ← NAME (pas username)
+    role: 'MODERATOR',
+    icon: '👮',
+    email: 'charlie@conlang.local',
+    id: 'cme6wmg520003k5m4mzldl9ju', // ← ID réel de la DB
+  },
 };
+
+type DevUserKey = keyof typeof DEV_USERS;
 
 export function DevHeaderSwitcher() {
   const [isOpen, setIsOpen] = useState(false);
-  const [currentUserKey, setCurrentUserKey] = useState('premium');
+  const [currentUserKey, setCurrentUserKey] = useState<DevUserKey>('premium');
+  const [mounted, setMounted] = useState(false);
   const { user, role, isDev } = useAuth();
 
-  // N'afficher qu'en développement
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   if (!isDev) {
     return null;
   }
 
+  if (!mounted) {
+    return (
+      <div className="flex items-center space-x-2 px-3 py-1.5 rounded-md text-sm font-medium text-gray-700 border border-gray-200">
+        <span className="text-xs bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded font-mono">
+          DEV
+        </span>
+        <span className="text-lg">💎</span>
+        <div className="text-left">
+          <div className="font-medium">Loading...</div>
+          <div className="text-xs px-1.5 py-0.5 rounded-full bg-gray-500 text-white">USER</div>
+        </div>
+      </div>
+    );
+  }
+
   const handleUserSwitch = (userKey: string) => {
     if (typeof window !== 'undefined') {
+      console.log('🔄 Switching to user:', userKey, DEV_USERS[userKey as DevUserKey]);
       localStorage.setItem('dev-user', userKey);
-      setCurrentUserKey(userKey);
-      window.location.reload(); // Reload pour appliquer les changements
+      setCurrentUserKey(userKey as DevUserKey);
+      window.location.reload();
     }
     setIsOpen(false);
   };
-
-  const currentUserData = DEV_USERS[currentUserKey as keyof typeof DEV_USERS] || DEV_USERS.premium;
 
   const getRoleBadgeColor = (role: string) => {
     switch (role) {
@@ -54,9 +99,21 @@ export function DevHeaderSwitcher() {
     return '';
   };
 
+  const getUserIcon = (userName?: string): string => {
+    if (!userName) return '💎';
+    const userEntry = Object.values(DEV_USERS).find((devUser) => devUser.name === userName);
+    return userEntry?.icon || '💎';
+  };
+
+  // DEBUG : Voir ce que reçoit le composant
+  console.log('🧪 DevHeaderSwitcher received user:', {
+    name: user?.name,
+    id: user?.id,
+    role: role,
+  });
+
   return (
     <div className="relative">
-      {/* Bouton utilisateur actuel */}
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="flex items-center space-x-2 px-3 py-1.5 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors border border-gray-200"
@@ -65,29 +122,23 @@ export function DevHeaderSwitcher() {
           DEV
         </span>
 
-        <span className="text-lg">
-          {user?.name ? DEV_USERS[user.name as keyof typeof DEV_USERS]?.icon || '💎' : '💎'}
-        </span>
+        <span className="text-lg">{getUserIcon(user?.name)}</span>
 
         <div className="text-left">
-          <div className="font-medium">{user?.name || 'bob'}</div>
+          <div className="font-medium">{user?.name || 'unknown'}</div>
           <div
-            className={`text-xs px-1.5 py-0.5 rounded-full ${getRoleBadgeColor(role || 'PREMIUM')}`}
+            className={`text-xs px-1.5 py-0.5 rounded-full ${getRoleBadgeColor(role || 'USER')}`}
           >
-            {role || 'PREMIUM'}
+            {role || 'USER'}
           </div>
         </div>
 
         <span className="text-gray-400 text-xs">▼</span>
       </button>
 
-      {/* Menu déroulant */}
       {isOpen && (
         <>
-          {/* Overlay pour fermer */}
           <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
-
-          {/* Menu */}
           <div className="absolute top-full right-0 mt-2 w-80 bg-white border border-gray-200 rounded-lg shadow-xl z-50">
             <div className="p-3">
               <div className="flex items-center justify-between mb-3">

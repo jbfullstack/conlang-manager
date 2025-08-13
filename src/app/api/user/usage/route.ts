@@ -1,4 +1,4 @@
-// app/api/user/usage/route.ts
+// app/api/user/usage/route.ts - Correction minimale
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
@@ -6,7 +6,6 @@ export async function GET(request: NextRequest) {
   try {
     const userId = request.nextUrl.searchParams.get('userId');
     
-    // CORRECTION: Pas d'userId par défaut, c'est une erreur
     if (!userId) {
       return NextResponse.json(
         { error: 'userId is required' }, 
@@ -37,11 +36,25 @@ export async function GET(request: NextRequest) {
     // Si pas d'entrée pour aujourd'hui, en créer une
     if (!dailyUsage) {
       console.log('🆕 Creating new dailyUsage entry...');
+      
+      // AJOUT MINIMAL : Compter les vraies compositions créées aujourd'hui
+      const realCompositionsToday = await prisma.combination.count({
+        where: {
+          createdBy: userId,
+          createdAt: {
+            gte: startOfDay,
+            lt: endOfDay
+          }
+        }
+      });
+      
+      console.log('🔢 Real compositions found today:', realCompositionsToday);
+      
       dailyUsage = await prisma.dailyUsage.create({
         data: {
           userId: userId,
           date: startOfDay,
-          compositionsCreated: 0,
+          compositionsCreated: realCompositionsToday, // ← CHANGEMENT : Pas 0, mais le vrai count
           aiSearchRequests: 0,
           aiAnalyzeRequests: 0,
           conceptsCreated: 0,
@@ -68,11 +81,11 @@ export async function GET(request: NextRequest) {
   }
 }
 
+// POST reste exactement pareil que votre version
 export async function POST(request: NextRequest) {
   try {
     const userId = request.nextUrl.searchParams.get('userId');
     
-    // CORRECTION: Pas d'userId par défaut, c'est une erreur
     if (!userId) {
       return NextResponse.json(
         { error: 'userId is required' }, 
