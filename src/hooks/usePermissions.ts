@@ -12,143 +12,88 @@ import {
   Permission
 } from '@/lib/permissions';
 
+import { useDailyUsage } from './useDailyUsage';
+import { useAuth } from './useDevAuth';
+
+const LIMITS_BY_ROLE: Record<string, number> = {
+  USER: 5,
+  PREMIUM: 50,
+  MODERATOR: 50,
+  ADMIN: -1,  // -1 = illimité
+};
+
 // Types pour l'utilisateur unifié
-interface UnifiedUser {
-  id: string;
-  email: string;
-  name?: string;
-  role: string;
-  username?: string;
-}
+// interface UnifiedUser {
+//   id: string;
+//   email: string;
+//   name?: string;
+//   role: string;
+//   username?: string;
+// }
 
-// REMETTRE LA FONCTION useDevAuth ICI (pas dans dev-auth.ts)
-function useDevAuth() {
-  const [currentUser, setCurrentUser] = useState<UnifiedUser | null>(null);
-  const [isClient, setIsClient] = useState(false);
+type UserRole = 'USER' | 'PREMIUM' | 'MODERATOR' | 'ADMIN';
 
-  useEffect(() => {
-    setIsClient(true);
-    
-    if (typeof window !== 'undefined') {
-      try {
-        // Définir users DANS le useEffect pour éviter la dépendance
-        const users: Record<string, UnifiedUser> = {
-          admin: {
-            id: 'cme6wmg4t0000k5m4wwwowp5c',
-            email: 'admin@conlang.local',
-            name: 'admin',
-            role: 'ADMIN',
-            username: 'admin',
-          },
-          user: {
-            id: 'cme6wmg500001k5m4be23k1gk',
-            email: 'alice@conlang.local',
-            name: 'alice',
-            role: 'USER',
-            username: 'alice',
-          },
-          premium: {
-            id: 'cme6wmg500002k5m41d0swmwh',
-            email: 'bob@conlang.local',
-            name: 'bob',
-            role: 'PREMIUM',
-            username: 'bob',
-          },
-          moderator: {
-            id: 'cme6wmg520003k5m4mzldl9ju',
-            email: 'charlie@conlang.local',
-            name: 'charlie',
-            role: 'MODERATOR',
-            username: 'charlie',
-          },
-        };
-
-        const savedUser = localStorage.getItem('dev-user') || 'premium';
-        console.log('🔧 useDevAuth reading localStorage:', savedUser);
-        
-        if (savedUser in users) {
-          const selectedUser = users[savedUser];
-          console.log('🔧 useDevAuth setting user to:', selectedUser.name, selectedUser.id);
-          setCurrentUser(selectedUser);
-        } else {
-          console.log('🔧 useDevAuth fallback to premium');
-          setCurrentUser(users.premium);
-        }
-      } catch (error) {
-        console.warn('Dev auth error:', error);
-        // Fallback en cas d'erreur
-        setCurrentUser({
-          id: 'cme6wmg500002k5m41d0swmwh',
-          email: 'bob@conlang.local',
-          name: 'bob',
-          role: 'PREMIUM',
-          username: 'bob',
-        });
-      }
-    }
-  }, []); // Vide : pas de dépendances = pas de boucle
-
-  const fallbackUser: UnifiedUser = {
-    id: 'cme6wmg500002k5m41d0swmwh',
-    email: 'bob@conlang.local',
-    name: 'bob',
-    role: 'PREMIUM',
-    username: 'bob',
-  };
-
-  console.log('🔧 useDevAuth returning:', {
-    currentUser: currentUser?.name,
-    currentUserId: currentUser?.id,
-    fallbackUsed: !currentUser,
-    isLoading: !isClient || !currentUser
+export function useDevAuth() {
+  const [state, setState] = useState({
+    currentUserId: undefined as string | undefined,
+    currentUser: undefined as { id: string; name: string; role: UserRole } | undefined,
+    fallbackUsed: true,
+    isLoading: true,
   });
 
-  return {
-    user: currentUser || fallbackUser,
-    role: (currentUser?.role || 'PREMIUM') as Role,
-    isAuthenticated: true,
-    isLoading: !isClient || !currentUser,
-  };
-}
+  useEffect(() => {
+    const id = localStorage.getItem('dev.userId') || undefined;
+    const username = localStorage.getItem('dev.username') || 'dev_user';
+    const role = (localStorage.getItem('dev.role') as UserRole) || 'USER';
 
+    setState({
+      currentUserId: id,
+      currentUser: id ? { id, name: username, role } : undefined,
+      fallbackUsed: true,
+      isLoading: false,
+    });
+  }, []);
+
+  return state;
+}
 // Hook principal useAuth - Version simplifiée
-export function useAuth() {
-  const isDevelopment = process.env.NODE_ENV === 'development';
+// export function useAuth() {
+//   const isDevelopment = process.env.NODE_ENV === 'development';
   
-  // En développement, utiliser le système de dev
-  const devAuth = isDevelopment ? useDevAuth() : { user: null, role: null, isAuthenticated: false, isLoading: false };
+//   // En développement, utiliser le système de dev
+//   const devAuth = isDevelopment ? useDevAuth() : { user: null, role: null, isAuthenticated: false, isLoading: false };
   
-  // En production, utiliser NextAuth (maintenant protégé par SessionProvider)
-  const { data: session, status } = useSession();
+//   // En production, utiliser NextAuth (maintenant protégé par SessionProvider)
+//   const { data: session, status } = useSession();
   
-  // Déterminer les valeurs finales
-  const user = isDevelopment ? devAuth.user : session?.user as UnifiedUser;
-  const role = isDevelopment ? devAuth.role : (session?.user?.role as Role);
-  const isAuthenticated = isDevelopment ? devAuth.isAuthenticated : !!session;
-  const isLoading = isDevelopment ? devAuth.isLoading : status === 'loading';
+//   // Déterminer les valeurs finales
+//   const user = isDevelopment ? devAuth.user : session?.user as UnifiedUser;
+//   const role = isDevelopment ? devAuth.role : (session?.user?.role as Role);
+//   const isAuthenticated = isDevelopment ? devAuth.isAuthenticated : !!session;
+//   const isLoading = isDevelopment ? devAuth.isLoading : status === 'loading';
 
-  // Fonctions utilitaires
-  const hasRole = (checkRole: Role): boolean => {
-    return role === checkRole;
-  };
+//   // Fonctions utilitaires
+//   const hasRole = (checkRole: Role): boolean => {
+//     return role === checkRole;
+//   };
 
-  const hasPermissionCheck = (permission: Permission): boolean => {
-    if (!isAuthenticated || !role) return false;
-    return hasPermission(role, permission);
-  };
+//   const hasPermissionCheck = (permission: Permission): boolean => {
+//     if (!isAuthenticated || !role) return false;
+//     return hasPermission(role, permission);
+//   };
 
-  return {
-    user,
-    role,
-    isAuthenticated,
-    isLoading,
-    // Fonctions qui étaient manquantes
-    hasRole,
-    hasPermission: hasPermissionCheck,
-    // Infos dev
-    isDev: isDevelopment,
-  };
-}
+//   return {
+//     user,
+//     role,
+//     isAuthenticated,
+//     isLoading,
+//     // Fonctions qui étaient manquantes
+//     hasRole,
+//     hasPermission: hasPermissionCheck,
+//     // Infos dev
+//     isDev: isDevelopment,
+//   };
+// }
 
 // Hook pour les permissions (utilise useAuth)
 export function usePermissions() {
@@ -314,86 +259,33 @@ export function usePermissions() {
 //   };
 // }
 
-// Données d'usage mockées selon le rôle
-function getMockUsage(role: Role) {
-  switch (role) {
-    case 'USER':
-      return {
-        compositionsCreated: 3,
-        aiSearchRequests: 0,
-        aiAnalyzeRequests: 0,
-        conceptsCreated: 1,
-        estimatedCostUsd: 0,
-      };
-    case 'PREMIUM':
-      return {
-        compositionsCreated: 12,
-        aiSearchRequests: 8,
-        aiAnalyzeRequests: 5,
-        conceptsCreated: 4,
-        estimatedCostUsd: 0.35,
-      };
-    case 'MODERATOR':
-      return {
-        compositionsCreated: 25,
-        aiSearchRequests: 18,
-        aiAnalyzeRequests: 12,
-        conceptsCreated: 8,
-        estimatedCostUsd: 0.78,
-      };
-    case 'ADMIN':
-      return {
-        compositionsCreated: 45,
-        aiSearchRequests: 32,
-        aiAnalyzeRequests: 28,
-        conceptsCreated: 15,
-        estimatedCostUsd: 2.15,
-      };
-    default:
-      return {
-        compositionsCreated: 0,
-        aiSearchRequests: 0,
-        aiAnalyzeRequests: 0,
-        conceptsCreated: 0,
-        estimatedCostUsd: 0,
-      };
-  }
-}
 
-export function useCompositionPermissions(compositionsCreatedParam?: number) {
-  const { can, canModify, role, isAuthenticated } = usePermissions();
+export function useCompositionPermissions() {
+  const { user } = useAuth();
+  const role = user?.role ?? 'USER';
+  const maxCompositionsPerDay = LIMITS_BY_ROLE[role] ?? 5;
 
-  const limits = role ? FEATURE_FLAGS[role] : null;
-  const compositionsCreated = compositionsCreatedParam ?? 0;
+  const { compositionsCreated } = useDailyUsage();
+  const remaining =
+    maxCompositionsPerDay === -1
+      ? -1
+      : compositionsCreated != null
+      ? Math.max(0, maxCompositionsPerDay - compositionsCreated)
+      : undefined;
 
-  const hasReachedCompositionLimit =
-    !!limits && limits.maxCompositionsPerDay > 0
-      ? compositionsCreated >= limits.maxCompositionsPerDay
-      : false;
-
-  const remainingCompositions =
-    limits && limits.maxCompositionsPerDay > 0
-      ? Math.max(0, limits.maxCompositionsPerDay - compositionsCreated)
-      : -1; // -1 = illimité
+  const canCreate = role !== 'USER' ? true : true; // à adapter si tu veux restreindre
+  const canUseAISearch = role === 'PREMIUM' || role === 'MODERATOR' || role === 'ADMIN';
+  const canUseAIAnalyze = canUseAISearch;
 
   return {
-    canView: can(PERMISSIONS.VIEW_COMPOSITIONS),
-    canCreate: can(PERMISSIONS.CREATE_COMPOSITIONS) && !hasReachedCompositionLimit,
-    canUseAI: can(PERMISSIONS.USE_AI_SEARCH) || can(PERMISSIONS.USE_AI_ANALYZE),
-    canUseAISearch: can(PERMISSIONS.USE_AI_SEARCH),
-    canUseAIAnalyze: can(PERMISSIONS.USE_AI_ANALYZE),
-    canModerate: can(PERMISSIONS.MODERATE_COMPOSITIONS),
-
-    limits,
-    hasReachedCompositionLimit,
-    remainingCompositions,
-    compositionsToday: compositionsCreated,
-    loadingCount: false,
-
-    canEdit: (ownerId: string) =>
-      canModify(ownerId, PERMISSIONS.EDIT_OWN_COMPOSITIONS, PERMISSIONS.EDIT_ALL_COMPOSITIONS),
-    canDelete: (ownerId: string) =>
-      canModify(ownerId, PERMISSIONS.DELETE_OWN_COMPOSITIONS, PERMISSIONS.DELETE_ALL_COMPOSITIONS),
-    isAuthenticated,
+    canUseAISearch,
+    canUseAIAnalyze,
+    canCreate,
+    limits: { maxCompositionsPerDay },
+    remainingCompositions: remaining,
+    hasReachedCompositionLimit:
+      maxCompositionsPerDay !== -1 &&
+      compositionsCreated != null &&
+      compositionsCreated >= maxCompositionsPerDay,
   };
 }

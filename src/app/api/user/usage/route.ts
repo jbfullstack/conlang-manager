@@ -1,53 +1,52 @@
-// src/app/api/user/usage/route.ts
-import { NextRequest, NextResponse } from 'next/server';
+
+import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
-async function ensureUserExists(userId: string) {
-  // toujours un username unique dérivé de l'id => évite P2002
-  const safeUsername = `user_${userId}`.slice(0, 30);
-  const safeEmail = `${userId}@dev.local`;
 
-  return prisma.user.upsert({
-    where: { id: userId },
-    update: {},
-    create: {
-      id: userId,
-      username: safeUsername,
-      email: safeEmail,
-      passwordHash: 'dev',
-      role: 'USER',
-      isActive: true,
-    },
-  });
+// --- util commun
+function dayBounds(d: Date) {
+  const start = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const end = new Date(start); end.setDate(end.getDate() + 1);
+  return { start, end };
 }
 
+// ⛔️ Ne plus auto-créer de user : on vérifie qu'il existe
+async function requireUser(userId: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  return user ?? null;
+}
 
-export async function GET(request: NextRequest) {
+// -------- GET /api/user/usage?userId=... --------
+export async function GET(req: Request) {
   try {
-    const userId = request.nextUrl.searchParams.get('userId');
+    const url = new URL(req.url);
+    const userId = url.searchParams.get('userId') ?? '';
     if (!userId) return NextResponse.json({ error: 'userId is required' }, { status: 400 });
 
-    await ensureUserExists(userId); // ← important
+    const user = await requireUser(userId);
+    if (!user) {
+      console.warn('[GET /user/usage] unknown_user:', userId);
+      return NextResponse.json({ error: 'unknown_user', userId }, { status: 400 });
+    }
 
-    const today = new Date();
-    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    const endOfDay   = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+    const { start, end } = dayBounds(new Date());
 
-    let dailyUsage = await prisma.dailyUsage.findFirst({
-      where: { userId, date: { gte: startOfDay, lt: endOfDay } },
+    // entrée du jour ?
+    let daily = await prisma.dailyUsage.findFirst({
+      where: { userId, date: { gte: start, lt: end } },
     });
 
-    if (!dailyUsage) {
-      // Compter les vraies compositions du jour pour initialiser correctement
-      const realCompositionsToday = await prisma.combination.count({
-        where: { createdBy: userId, createdAt: { gte: startOfDay, lt: endOfDay } },
+    if (!daily) {
+      // on initialise avec le "vrai" nombre de compositions du jour
+      const realCount = await prisma.combination.count({
+        where: { createdBy: userId, createdAt: { gte: start, lt: end } },
       });
 
-      dailyUsage = await prisma.dailyUsage.create({
+      daily = await prisma.dailyUsage.create({
         data: {
           userId,
-          date: startOfDay,
-          compositionsCreated: realCompositionsToday,
+          date: start,
+          compositionsCreated: realCount,
           aiSearchRequests: 0,
           aiAnalyzeRequests: 0,
           conceptsCreated: 0,
@@ -56,67 +55,63 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    return NextResponse.json({
-      compositionsCreated: dailyUsage.compositionsCreated,
-      aiSearchRequests: dailyUsage.aiSearchRequests,
-      aiAnalyzeRequests: dailyUsage.aiAnalyzeRequests,
-      conceptsCreated: dailyUsage.conceptsCreated,
-      estimatedCostUsd: dailyUsage.estimatedCostUsd,
-    });
-  } catch (error) {
-    console.error('❌ Erreur API GET user/usage:', error);
-    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
+    return NextResponse.json(daily);
+  } catch (e) {
+    console.error('❌ Erreur API GET user/usage:', e);
+    return NextResponse.json({ error: 'internal_error' }, { status: 500 });
   }
 }
 
-export async function POST(request: NextRequest) {
+// -------- POST /api/user/usage?userId=... --------
+export async function POST(req: Request) {
   try {
-    const userId = request.nextUrl.searchParams.get('userId');
+    const url = new URL(req.url);
+    const userId = url.searchParams.get('userId') ?? '';
     if (!userId) return NextResponse.json({ error: 'userId is required' }, { status: 400 });
 
-    await ensureUserExists(userId); // ← important
+    const user = await requireUser(userId);
+    if (!user) {
+      console.warn('[POST /user/usage] unknown_user:', userId);
+      return NextResponse.json({ error: 'unknown_user', userId }, { status: 400 });
+    }
 
-    const { increment } = await request.json();
-    const today = new Date();
-    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    const endOfDay   = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+    const { increment } = await req.json().catch(() => ({} as any));
+    const { start, end } = dayBounds(new Date());
 
-    const existing = await prisma.dailyUsage.findFirst({
-      where: { userId, date: { gte: startOfDay, lt: endOfDay } },
+    let daily = await prisma.dailyUsage.findFirst({
+      where: { userId, date: { gte: start, lt: end } },
     });
 
-    let dailyUsage;
-    if (existing) {
-      const data: any = {};
-      if (increment === 'compositions') data.compositionsCreated = existing.compositionsCreated + 1;
-      else if (increment === 'aiSearch') data.aiSearchRequests = existing.aiSearchRequests + 1;
-      else if (increment === 'aiAnalyze') data.aiAnalyzeRequests = existing.aiAnalyzeRequests + 1;
-      else if (increment === 'concepts') data.conceptsCreated = existing.conceptsCreated + 1;
-
-      dailyUsage = await prisma.dailyUsage.update({ where: { id: existing.id }, data });
-    } else {
-      dailyUsage = await prisma.dailyUsage.create({
+    if (!daily) {
+      const realCount = await prisma.combination.count({
+        where: { createdBy: userId, createdAt: { gte: start, lt: end } },
+      });
+      daily = await prisma.dailyUsage.create({
         data: {
           userId,
-          date: startOfDay,
-          compositionsCreated: increment === 'compositions' ? 1 : 0,
-          aiSearchRequests:    increment === 'aiSearch'      ? 1 : 0,
-          aiAnalyzeRequests:   increment === 'aiAnalyze'     ? 1 : 0,
-          conceptsCreated:     increment === 'concepts'      ? 1 : 0,
+          date: start,
+          compositionsCreated: realCount,
+          aiSearchRequests: 0,
+          aiAnalyzeRequests: 0,
+          conceptsCreated: 0,
           estimatedCostUsd: 0,
         },
       });
     }
 
-    return NextResponse.json({
-      compositionsCreated: dailyUsage.compositionsCreated,
-      aiSearchRequests: dailyUsage.aiSearchRequests,
-      aiAnalyzeRequests: dailyUsage.aiAnalyzeRequests,
-      conceptsCreated: dailyUsage.conceptsCreated,
-      estimatedCostUsd: dailyUsage.estimatedCostUsd,
-    });
-  } catch (error) {
-    console.error('❌ Erreur API POST user/usage:', error);
-    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
+    // Incréments
+    const data: any = {};
+    if (increment === 'compositions') data.compositionsCreated = daily.compositionsCreated + 1;
+    if (increment === 'ai_search')   data.aiSearchRequests   = daily.aiSearchRequests + 1;
+    if (increment === 'ai_analyze')  data.aiAnalyzeRequests  = daily.aiAnalyzeRequests + 1;
+
+    if (Object.keys(data).length) {
+      daily = await prisma.dailyUsage.update({ where: { id: daily.id }, data });
+    }
+
+    return NextResponse.json(daily);
+  } catch (e) {
+    console.error('❌ Erreur API POST user/usage:', e);
+    return NextResponse.json({ error: 'internal_error' }, { status: 500 });
   }
 }

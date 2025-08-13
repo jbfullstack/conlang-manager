@@ -1,9 +1,9 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
-import { DevHeaderSwitcher } from '@/dev/dev-header-switcher';
 import { DevBanner } from '@/dev/dev-banner';
 import { SessionProvider } from './components/providers/SessionProvider';
+import DevHeaderSwitcher from '@/dev/dev-header-switcher';
 
 const inter = Inter({ subsets: ['latin'] });
 
