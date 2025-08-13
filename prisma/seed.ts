@@ -5,6 +5,10 @@
 import { CATEGORY_KEYS } from '@/lib/categories';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { createHash } from 'crypto';
+
+const patternHashFromArray = (pattern: string[]) =>
+  createHash('sha256').update(JSON.stringify(pattern)).digest('hex');
 
 const prisma = new PrismaClient();
 
@@ -337,6 +341,7 @@ async function main() {
     prisma.combination.create({
       data: {
         pattern: JSON.stringify(['go', 'tomu']),
+        patternHash: patternHashFromArray(['go', 'tomu']),
         sens: 'torrent, cascade, chute d\'eau rapide',
         description: 'Combinaison évidente : eau + mouvement rapide',
         statut: 'ADOPTE',
@@ -351,6 +356,7 @@ async function main() {
     prisma.combination.create({
       data: {
         pattern: JSON.stringify(['sol', 'go']),
+        patternHash: patternHashFromArray(['sol', 'go']),
         sens: 'reflet du soleil sur l\'eau, miroitement',
         description: 'Image poétique du soleil se reflétant dans l\'eau',
         statut: 'EN_COURS',
@@ -363,6 +369,7 @@ async function main() {
     prisma.combination.create({
       data: {
         pattern: JSON.stringify(['nox', 'kala']),
+        patternHash: patternHashFromArray(['nox', 'kala']),
         sens: 'beauté nocturne, splendeur de la nuit',
         description: 'La beauté particulière de la nuit étoilée',
         statut: 'PROPOSITION',

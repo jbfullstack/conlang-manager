@@ -1,16 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
+import crypto from 'crypto';
 
 const prisma = new PrismaClient();
+
+// ⬇️ helper: hash ordre-sensible du pattern (array de string)
+function patternHash(pattern: string[]) {
+  // JSON.stringify conserve l’ordre; on hash la représentation JSON
+  return crypto.createHash('sha256').update(JSON.stringify(pattern)).digest('hex');
+}
 
 export async function POST(request: NextRequest) {
   try {
     const { pattern, sens, description, statut, source, confidenceScore } = await request.json();
+
+    const hash = patternHash(pattern);
+
+    const existing = await prisma.combination.findFirst({
+      where: { patternHash: hash }, // ⚠️ champ patternHash à ajouter en DB (cf 1.2)
+    });
+    if (existing) {
+      return NextResponse.json(
+        { error: 'COMPOSITION_EXISTS', existing },
+        { status: 409 }
+      );
+    }
     
     // Créer la nouvelle combination
     const combination = await prisma.combination.create({
       data: {
-        pattern: JSON.stringify(pattern), // Array des IDs de concepts
+        pattern: JSON.stringify(pattern), 
+        patternHash: hash,
         sens,
         description,
         statut,

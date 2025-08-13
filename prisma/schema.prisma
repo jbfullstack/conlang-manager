@@ -140,7 +140,8 @@ model ConceptProperty {
 
 model Combination {
   id              String            @id @default(cuid())
-  pattern         String            // JSON string of concept IDs
+  pattern         String            // JSON string of concept IDs (ordre sensible)
+  patternHash     String            @unique @map("pattern_hash") // hash ordre-sensible
   sens            String
   description     String?
   statut          CombinationStatus @default(PROPOSITION)
