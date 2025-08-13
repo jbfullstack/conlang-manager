@@ -1,14 +1,16 @@
 import useSWR from 'swr';
+import { useAuth } from '@/hooks/useDevAuth';
 
 export type Usage = {
   compositionsCreated: number;
-  // ⚠️ PAS de maxPerDay ici : c’est côté limits/FEATURE_FLAGS
 };
 
 const fetcher = (url: string) => fetch(url).then(r => r.json());
 
 export function useDailyUsage(userId?: string) {
-  const key = userId ? `/api/user/usage?userId=${userId}` : null;
+  const { user } = useAuth();                    // <-- ajouter
+  const effectiveId = userId ?? user?.id;        // <-- ajouter
+  const key = effectiveId ? `/api/user/usage?userId=${effectiveId}` : null; // <-- remplacer
 
   const { data, mutate, isLoading, error } = useSWR<Usage>(key, fetcher, {
     revalidateOnFocus: true,
@@ -16,12 +18,15 @@ export function useDailyUsage(userId?: string) {
   });
 
   const incrementComposition = async (uid?: string) => {
-    const id = uid ?? userId;
-    if (!id) { console.warn('incrementComposition: called without userId — noop'); return; } // ✅ au lieu de throw
-    await mutate(async (current) => {
-      const resp = await fetch(`/api/user/usage?userId=${id}`, { method: 'POST', body: JSON.stringify({ increment: 'compositions' }), headers: { 'Content-Type': 'application/json' } });
-      const updated = await resp.json();
-      return updated;
+    const id = uid ?? effectiveId;               // <-- utiliser effectiveId
+    if (!id) { console.warn('incrementComposition: called without userId — noop'); return; }
+    await mutate(async () => {
+      const resp = await fetch(`/api/user/usage?userId=${id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ increment: 'compositions' })
+      });
+      return await resp.json();
     }, { revalidate: false });
   };
 
