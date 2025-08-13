@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { openai } from '@/lib/openai';
-import { PrismaClient } from '@prisma/client';
 import parseLLMJson, { buildLLMPromptRequest } from '@/lib/llm-utils';
-
-const prisma = new PrismaClient();
+import { prisma } from '@/lib/prisma';
 
 function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {

@@ -34,8 +34,9 @@ type CompositionResult = {
 
 export default function CompositionPage() {
   // --- Auth & permissions
-  const { user, isAuthenticated, isLoading } = useAuth();
-  const { incrementComposition, refreshUsage, compositionsCreated, swrKey } = useDailyUsage();
+  const { user, isAuthenticated } = useAuth();
+  const { incrementComposition, refreshUsage, swrKey } = useDailyUsage();
+  const { compositionsCreated, isLoading } = useDailyUsage(user?.id);
   const {
     canUseAISearch,
     canUseAIAnalyze,
@@ -174,7 +175,8 @@ export default function CompositionPage() {
     if (compositionResult || selectedConcepts.length > 0) {
       setSaveFormData((p) => ({
         ...p,
-        sens: compositionResult?.sens ?? '',
+        // si l'utilisateur a saisi quelque chose en IA Reverse, on le met en priorité
+        sens: aiReverseInput?.trim() || compositionResult?.sens || '',
         description: compositionResult?.justification ?? '',
       }));
       setShowSaveModal(true);
@@ -259,11 +261,52 @@ export default function CompositionPage() {
     }
   };
 
+  const selectedConceptsForModal = useMemo(() => {
+    // 1) si l'IA a renvoyé des IDs (pattern), on mappe direct
+    if (compositionResult?.pattern?.length) {
+      const byId = new Map(concepts.map((c) => [c.id, c]));
+      return compositionResult.pattern.map((id) => byId.get(id)).filter(Boolean) as Concept[];
+    }
+
+    // 2) sinon, si l'IA a renvoyé des mots, on mappe mot -> id -> Concept
+    if (compositionResult?.patternWords?.length) {
+      const byMot = new Map(concepts.map((c) => [c.mot.toLowerCase(), c]));
+      const mapped = compositionResult.patternWords
+        .map((w) => byMot.get((w || '').toLowerCase()))
+        .filter(Boolean) as Concept[];
+      if (mapped.length >= 2) return mapped;
+    }
+
+    // 3) fallback : garder la sélection UI actuelle
+    return selectedConcepts;
+  }, [compositionResult, concepts, selectedConcepts]);
+
   // --- Sauvegarde (IA) identique
   const handleSaveComposition = async () => {
-    const pattern = selectedConcepts.map((c) => c.id);
+    // 1) si l'IA a déjà renvoyé des IDs, on les utilise directement
+    let finalPattern: string[] | undefined =
+      compositionResult?.pattern && compositionResult.pattern.length > 0
+        ? compositionResult.pattern
+        : undefined;
+
+    // 2) sinon, si l'IA a renvoyé des mots, on mappe vers les IDs connus
+    if (!finalPattern && compositionResult?.patternWords?.length) {
+      const idByMot = new Map(concepts.map((c) => [c.mot.toLowerCase(), c.id])); // concepts dispo via useConcepts()
+      const mapped = compositionResult.patternWords
+        .map((w) => idByMot.get((w || '').toLowerCase()))
+        .filter(Boolean) as string[];
+      if (mapped.length >= 2) {
+        finalPattern = mapped;
+      }
+    }
+
+    // 3) sinon, fallback sur la sélection de l'UI
+    if (!finalPattern) {
+      finalPattern = selectedConcepts.map((c) => c.id);
+    }
+
     const payload = {
-      pattern,
+      pattern: finalPattern,
       sens: saveFormData.sens,
       description: saveFormData.description,
       statut: saveFormData.statut,
@@ -304,6 +347,9 @@ export default function CompositionPage() {
       alert('Erreur sauvegarde');
     }
   };
+
+  // const maxPerDay = LIMITS_BY_ROLE[user?.role ?? 'USER'] ?? 5;
+  // const remaining = Math.max(0, maxPerDay - (compositionsCreated ?? 0));
 
   if (isLoading) return <div>Chargement...</div>;
   if (!isAuthenticated) return <div>Pas connecté</div>;
@@ -346,15 +392,23 @@ export default function CompositionPage() {
                 <span className="font-medium">{communityComps.length}</span>
                 <span className="hidden sm:inline ml-1">compositions</span>
               </div>
-              {limits && (
-                <div className="flex items-center bg-orange-50 px-2 sm:px-3 py-1 rounded-full">
-                  <span className="mr-1">⚡</span>
-                  <span className="font-medium">
-                    {remainingCompositions === -1 ? '∞' : String(remainingCompositions)}
-                  </span>
-                  <span className="hidden sm:inline ml-1">restantes</span>
-                </div>
+              {isLoading ? (
+                // skeleton simple, charte conservée (badge gris)
+                <span className="inline-flex items-center rounded-full border px-3 py-1 text-sm bg-gray-100 text-gray-500">
+                  chargement…
+                </span>
+              ) : (
+                limits && (
+                  <div className="flex items-center bg-orange-50 px-2 sm:px-3 py-1 rounded-full">
+                    <span className="mr-1">⚡</span>
+                    <span className="font-medium">
+                      {remainingCompositions === -1 ? '∞' : String(remainingCompositions)}
+                    </span>
+                    <span className="hidden sm:inline ml-1">restantes</span>
+                  </div>
+                )
               )}
+              ;
               <div className="flex items-center bg-purple-50 px-2 sm:px-3 py-1 rounded-full">
                 <span className="font-medium">{user?.role}</span>
               </div>
@@ -567,21 +621,21 @@ export default function CompositionPage() {
                   </p>
                 </div>
               ))}
+            {/* Résultat IA - avec vérification de sauvegarde */}
+            {compositionResult && (
+              <CompositionResultPanel
+                compositionResult={compositionResult}
+                onClose={() => setCompositionResult(null)}
+                onSave={canCreate && !hasReachedCompositionLimit ? openSaveModal : undefined}
+                disabled={!canCreate || hasReachedCompositionLimit}
+                disabledMessage={
+                  hasReachedCompositionLimit
+                    ? 'Limite quotidienne atteinte'
+                    : 'Permission insuffisante'
+                }
+              />
+            )}
           </div>
-          {/* Résultat IA - avec vérification de sauvegarde */}
-          {compositionResult && (
-            <CompositionResultPanel
-              compositionResult={compositionResult}
-              onClose={() => setCompositionResult(null)}
-              onSave={canCreate && !hasReachedCompositionLimit ? openSaveModal : undefined}
-              disabled={!canCreate || hasReachedCompositionLimit}
-              disabledMessage={
-                hasReachedCompositionLimit
-                  ? 'Limite quotidienne atteinte'
-                  : 'Permission insuffisante'
-              }
-            />
-          )}
         </div>
 
         {/* Compositions récentes (inchangé) */}
@@ -606,7 +660,7 @@ export default function CompositionPage() {
             isOpen={showSaveModal}
             onClose={() => setShowSaveModal(false)}
             onSave={handleSaveComposition}
-            selectedConcepts={selectedConcepts}
+            selectedConcepts={selectedConceptsForModal}
             compositionResult={compositionResult}
             saveFormData={saveFormData}
             setSaveFormData={setSaveFormData}

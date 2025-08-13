@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from '@/lib/prisma';
 
 export async function GET(request: NextRequest) {
   try {
@@ -73,6 +71,11 @@ export async function GET(request: NextRequest) {
 
     // Nouveau mode paginé avec filtrage global
     let where: any = {};
+
+    // Par défaut, on n'affiche que les actifs
+    if (typeof where.isActive === 'undefined') {
+      where.isActive = true;
+    }
 
     // Filtrage par recherche textuelle
     if (search) {
@@ -191,7 +194,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (definition.length < 10 || definition.length > 500) {
+    if (definition.length < 2 || definition.length > 500) {
       return NextResponse.json(
         { error: 'La définition doit contenir entre 10 et 500 caractères' },
         { status: 400 }

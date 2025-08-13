@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
-
-const prisma = new PrismaClient();
+import { prisma } from '@/lib/prisma';
 
 // ⬇️ helper: hash ordre-sensible du pattern (array de string)
 function patternHash(pattern: string[]) {

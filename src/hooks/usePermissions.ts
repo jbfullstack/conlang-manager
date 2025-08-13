@@ -1,4 +1,3 @@
-// hooks/usePermissions.ts - Version complète corrigée
 import { useSession } from 'next-auth/react';
 import { useCallback, useEffect, useState } from 'react';
 import { 
@@ -21,15 +20,6 @@ const LIMITS_BY_ROLE: Record<string, number> = {
   MODERATOR: 50,
   ADMIN: -1,  // -1 = illimité
 };
-
-// Types pour l'utilisateur unifié
-// interface UnifiedUser {
-//   id: string;
-//   email: string;
-//   name?: string;
-//   role: string;
-//   username?: string;
-// }
 
 type UserRole = 'USER' | 'PREMIUM' | 'MODERATOR' | 'ADMIN';
 
@@ -132,134 +122,6 @@ export function usePermissions() {
   };
 }
 
-// Hook pour l'usage quotidien (version simplifiée pour dev)
-// export function useDailyUsage() {
-//   const { user, isAuthenticated, role } = useAuth();
-//   const [usage, setUsage] = useState({
-//     compositionsCreated: 0,
-//     aiSearchRequests: 0,
-//     aiAnalyzeRequests: 0,
-//     conceptsCreated: 0,
-//     estimatedCostUsd: 0,
-//     isLoading: true,
-//   });
-
-//   // AJOUT DEBUG : Log à chaque changement de usage
-//   useEffect(() => {
-//     console.log('🔢 useDailyUsage state changed:', usage);
-//   }, [usage]);
-
-//   const fetchUsage = useCallback(async () => {
-//     console.log('🔄 fetchUsage called for user:', user?.id);
-    
-//     if (!isAuthenticated || !user?.id) {
-//       console.log('❌ fetchUsage: Not authenticated or no user ID');
-//       setUsage(prev => ({ ...prev, isLoading: false }));
-//       return;
-//     }
-
-//     try {
-//       console.log('📡 Fetching usage from API...');
-//       const response = await fetch(`/api/user/usage?userId=${user.id}`);
-//       console.log('📡 API response status:', response.status);
-      
-//       if (response.ok) {
-//         const data = await response.json();
-//         console.log('✅ API returned usage data:', data);
-//         setUsage({ ...data, isLoading: false });
-//       } else {
-//         console.log('⚠️ API error, using mock data');
-//         const mockUsage = getMockUsage(role as Role);
-//         console.log('⚠️ Mock usage data:', mockUsage);
-//         setUsage({ ...mockUsage, isLoading: false });
-//       }
-//     } catch (error) {
-//       console.error('❌ Error fetching usage:', error);
-//       const mockUsage = getMockUsage(role as Role);
-//       setUsage({ ...mockUsage, isLoading: false });
-//     }
-//   }, [isAuthenticated, user?.id, role]);
-
-//   useEffect(() => {
-//     fetchUsage();
-//   }, [fetchUsage]);
-
-//   const refreshUsage = async () => {
-//     if (!isAuthenticated || !user?.id) return;
-    
-//     setUsage(prev => ({ ...prev, isLoading: true }));
-//     await fetchUsage();
-//   };
-
-//   const incrementUsage = async (type: 'compositions' | 'aiSearch' | 'aiAnalyze' | 'concepts') => {
-//     if (!isAuthenticated || !user?.id) {
-//       console.warn('⚠️ incrementUsage: User not authenticated or no user ID');
-//       return;
-//     }
-    
-//     console.log('🚀 incrementUsage called with:', { type, userId: user.id });
-//     console.log('🚀 Current usage BEFORE increment:', usage);
-    
-//     try {
-//       const url = `/api/user/usage?userId=${user.id}`;
-//       const body = { increment: type };
-      
-//       console.log('🚀 Making POST request to:', url, 'with body:', body);
-      
-//       const response = await fetch(url, {
-//         method: 'POST',
-//         headers: { 'Content-Type': 'application/json' },
-//         body: JSON.stringify(body)
-//       });
-      
-//       console.log('🚀 POST Response status:', response.status);
-      
-//       if (response.ok) {
-//         const updatedUsage = await response.json();
-//         console.log('✅ Updated usage from API:', updatedUsage);
-//         console.log('✅ Previous local usage:', usage);
-        
-//         setUsage(prev => {
-//           const newUsage = {
-//             ...prev,
-//             compositionsCreated: updatedUsage.compositionsCreated,
-//             aiSearchRequests: updatedUsage.aiSearchRequests,
-//             aiAnalyzeRequests: updatedUsage.aiAnalyzeRequests,
-//             conceptsCreated: updatedUsage.conceptsCreated,
-//             estimatedCostUsd: updatedUsage.estimatedCostUsd,
-//           };
-//           console.log('✅ New local usage AFTER setUsage:', newUsage);
-//           return newUsage;
-//         });
-//       } else {
-//         const errorText = await response.text();
-//         console.error('❌ API POST response not ok:', response.status, errorText);
-//       }
-//     } catch (error) {
-//       console.error('❌ Error in incrementUsage:', error);
-//     }
-//   };
-
-//   const incrementComposition = () => {
-//     console.log('🎯 incrementComposition called');
-//     return incrementUsage('compositions');
-//   };
-
-//   const incrementAISearch = () => incrementUsage('aiSearch');
-//   const incrementAIAnalyze = () => incrementUsage('aiAnalyze');
-//   const incrementConcept = () => incrementUsage('concepts');
-
-//   return {
-//     ...usage,
-//     refreshUsage,
-//     incrementComposition,
-//     incrementAISearch,
-//     incrementAIAnalyze,
-//     incrementConcept,
-//   };
-// }
-
-
 export function useCompositionPermissions() {
   const { user } = useAuth();
   const role = user?.role ?? 'USER';
@@ -273,7 +135,10 @@ export function useCompositionPermissions() {
       ? Math.max(0, maxCompositionsPerDay - compositionsCreated)
       : undefined;
 
-  const canCreate = role !== 'USER' ? true : true; // à adapter si tu veux restreindre
+  const canCreate =
+    (maxCompositionsPerDay === -1) ||
+    (compositionsCreated != null && compositionsCreated < maxCompositionsPerDay);
+
   const canUseAISearch = role === 'PREMIUM' || role === 'MODERATOR' || role === 'ADMIN';
   const canUseAIAnalyze = canUseAISearch;
 

@@ -2,6 +2,11 @@ import { NextResponse } from 'next/server';
 import {prisma} from '@/lib/prisma';
 
 export async function GET(req: Request) {
+  
+  if (process.env.NODE_ENV !== 'development') {
+    return NextResponse.json({ error: 'not_found' }, { status: 404 });
+  }
+
   try {
     const url = new URL(req.url);
     const username = url.searchParams.get('username') ?? '';

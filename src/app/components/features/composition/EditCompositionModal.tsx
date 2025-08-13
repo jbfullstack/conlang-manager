@@ -152,6 +152,9 @@ export default function EditCompositionModal({
             className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
           >
             {saving ? 'Enregistrement…' : 'Enregistrer'}
+            {saving && (
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+            )}
           </button>
         </div>
       </div>

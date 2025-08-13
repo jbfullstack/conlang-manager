@@ -1,8 +1,6 @@
-// lib/usage-tracking.ts
-import { PrismaClient } from '@prisma/client';
-import { FEATURE_FLAGS, Role } from './permissions';
 
-const prisma = new PrismaClient();
+import { FEATURE_FLAGS, Role } from './permissions';
+import { prisma } from '@/lib/prisma';
 
 export interface DailyUsageData {
   compositionsCreated: number;

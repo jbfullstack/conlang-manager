@@ -1,7 +1,3 @@
-// lib/dev-auth.ts - Système d'auth pour le développement
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
 
 // Interface commune pour tous les utilisateurs
 interface DevUserData {
@@ -102,61 +98,5 @@ export function createDevSession(userKey?: DevUserKey) {
       role: user.role,
     },
     expires: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24h
-  };
-}
-
-// lib/api-security-dev.ts - Version développement des helpers de sécurité
-import { NextRequest, NextResponse } from 'next/server';
-import { SecurityContext } from '@/lib/api-security';
-import { Role, Permission, hasPermission, canModifyResource } from '@/lib/permissions';
-
-// Version dev du requireAuth qui bypass l'authentification
-export async function requireAuthDev(request: NextRequest): Promise<SecurityContext | NextResponse> {
-  if (process.env.NODE_ENV !== 'development') {
-    // En production, utiliser le vrai système
-    const { requireAuth } = await import('@/lib/api-security');
-    return requireAuth(request);
-  }
-
-  // En développement, créer un contexte avec l'utilisateur dev
-  const devUser = getDevUser();
-  
-  const user = {
-    id: devUser.id,
-    email: devUser.email,
-    role: devUser.role as Role,
-    username: devUser.username,
-  };
-
-  const context: SecurityContext = {
-    user,
-    hasPermission: (permission: Permission) => hasPermission(user.role, permission),
-    canModifyResource: (resourceOwnerId: string, editOwn: Permission, editAll: Permission) => 
-      canModifyResource(user.role, user.id, resourceOwnerId, editOwn, editAll),
-  };
-
-  return context;
-}
-
-// Wrapper pour les routes API en développement  
-export function withDevSecurity<T extends any[]>(
-  handler: (context: SecurityContext, ...args: T) => Promise<NextResponse>
-) {
-  return async (request: NextRequest, ...args: T): Promise<NextResponse> => {
-    try {
-      const authResult = await requireAuthDev(request);
-      
-      if (authResult instanceof NextResponse) {
-        return authResult;
-      }
-
-      return await handler(authResult, ...args);
-    } catch (error) {
-      console.error('Dev security error:', error);
-      return NextResponse.json({
-        error: 'Internal dev security error',
-        code: 'DEV_ERROR'
-      }, { status: 500 });
-    }
   };
 }

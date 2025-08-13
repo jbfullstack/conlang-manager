@@ -8,9 +8,9 @@ export type Usage = {
 const fetcher = (url: string) => fetch(url).then(r => r.json());
 
 export function useDailyUsage(userId?: string) {
-  const { user } = useAuth();                    // <-- ajouter
-  const effectiveId = userId ?? user?.id;        // <-- ajouter
-  const key = effectiveId ? `/api/user/usage?userId=${effectiveId}` : null; // <-- remplacer
+  const { user } = useAuth();                    
+  const effectiveId = userId ?? user?.id;        
+  const key = effectiveId ? `/api/user/usage?userId=${effectiveId}` : null;
 
   const { data, mutate, isLoading, error } = useSWR<Usage>(key, fetcher, {
     revalidateOnFocus: true,
@@ -18,7 +18,7 @@ export function useDailyUsage(userId?: string) {
   });
 
   const incrementComposition = async (uid?: string) => {
-    const id = uid ?? effectiveId;               // <-- utiliser effectiveId
+    const id = uid ?? effectiveId;             
     if (!id) { console.warn('incrementComposition: called without userId — noop'); return; }
     await mutate(async () => {
       const resp = await fetch(`/api/user/usage?userId=${id}`, {

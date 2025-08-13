@@ -1,6 +1,4 @@
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from '@/lib/prisma';
 
 // Récupérer les concepts avec leurs propriétés
 export async function getConceptsFromDB(conceptIds: string[]) {
@@ -18,21 +16,6 @@ export async function getConceptsFromDB(conceptIds: string[]) {
     }
   });
 }
-
-// Récupérer tous les concepts actifs
-// export async function getAllConcepts() {
-//   return await prisma.concept.findMany({
-//     where: { isActive: true },
-//     include: {
-//       conceptProperties: {
-//         include: {
-//           property: true
-//         }
-//       }
-//     },
-//     orderBy: { mot: 'asc' }
-//   });
-// }
 
 // Vérifier cache LLM existant
 export async function checkLLMCache(cacheKey: string) {
@@ -84,28 +67,6 @@ export async function checkExistingCombination(conceptIds: string[]) {
     where: {
       pattern: pattern,
       statut: { not: 'REFUSE' } // Exclure les refusés
-    }
-  });
-}
-
-// Sauvegarder une nouvelle combinaison
-export async function saveCombination(
-  conceptIds: string[],
-  sens: string,
-  source: 'MANUAL' | 'LLM_SUGGESTED' | 'ALGORITHMIC',
-  confidenceScore: number,
-  createdBy?: string
-) {
-  const pattern = JSON.stringify(conceptIds.sort());
-  
-  return await prisma.combination.create({
-    data: {
-      pattern,
-      sens,
-      source,
-      confidenceScore,
-      createdBy,
-      statut: confidenceScore > 0.8 ? 'ADOPTE' : 'PROPOSITION'
     }
   });
 }

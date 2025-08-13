@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
+import { prisma } from '@/lib/prisma';
 
 function patternHash(pattern: string[]) {
   return crypto.createHash('sha256').update(JSON.stringify(pattern)).digest('hex');
 }
 
-const prisma = new PrismaClient();
+
 
 interface RouteParams {
   params: Promise<{ id: string }>;

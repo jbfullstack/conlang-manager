@@ -108,21 +108,6 @@ export async function requireUsageLimitDev(
   return authResult;
 }
 
-export function withDevSecurity<T extends any[]>(
-  handler: (context: SecurityContext, ...args: T) => Promise<NextResponse>
-) {
-  return async (request: NextRequest, ...args: T): Promise<NextResponse> => {
-    try {
-      const authResult = await requireAuthDev(request);
-      if (authResult instanceof NextResponse) return authResult;
-      return await handler(authResult, ...args);
-    } catch (error) {
-      console.error('Dev security error:', error);
-      return NextResponse.json({ error: 'Internal dev security error', code: 'DEV_ERROR' }, { status: 500 });
-    }
-  };
-}
-
 export function withDevUsageLimit<T extends any[]>(
   permission: Permission,
   actionType: 'compositionsCreated' | 'aiSearchRequests' | 'aiAnalyzeRequests' | 'conceptsCreated',
