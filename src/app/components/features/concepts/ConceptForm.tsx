@@ -1,5 +1,6 @@
 import { Concept } from '@/interfaces/concept.interface';
 import { Property } from '@/interfaces/property.interface';
+import { fetchPostProperties, fetchProperties } from '@/utils/api-client';
 import { useState, useEffect, useRef } from 'react';
 
 interface ConceptFormProps {
@@ -37,7 +38,7 @@ export default function ConceptForm({ concept, onSubmit, onCancel }: ConceptForm
 
   const fetchExistingProperties = async () => {
     try {
-      const response = await fetch('/api/properties');
+      const response = await fetchProperties();
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
       const data = await response.json();
       setAvailableProperties(data.properties || []);
@@ -183,15 +184,20 @@ export default function ConceptForm({ concept, onSubmit, onCancel }: ConceptForm
 
       // Créer la propriété dans la base si elle n'existe pas
       try {
-        await fetch('/api/properties', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: propertyName,
-            category: 'custom',
-            description: `Propriété créée automatiquement: ${propertyName}`,
-          }),
+        await fetchPostProperties({
+          name: propertyName,
+          category: 'custom',
+          description: `Propriété créée automatiquement: ${propertyName}`,
         });
+        // await fetch('/api/properties', {
+        //   method: 'POST',
+        //   headers: { 'Content-Type': 'application/json' },
+        //   body: JSON.stringify({
+        //     name: propertyName,
+        //     category: 'custom',
+        //     description: `Propriété créée automatiquement: ${propertyName}`,
+        //   }),
+        // });
         // Recharger les propriétés disponibles
         fetchExistingProperties();
       } catch (error) {

@@ -1,6 +1,7 @@
 'use client';
 import React, { useEffect, useState } from 'react';
 import Pagination from '@/app/components/ui/Pagination';
+import { fetch as signedFetch } from '@/utils/api-client';
 
 type ConceptItem = { id: string; type: string; label: string; description?: string };
 type CombinationItem = {

@@ -19,39 +19,39 @@ export async function POST(request: NextRequest) {
 
     // Prompt optimisé: liste des primitives avec leurs propriétés utilisées (limitées)
     const prompt = `
-Tu es un linguiste expert en langue construite basée sur des concepts primitifs.
+        Tu es un linguiste expert en langue construite basée sur des concepts primitifs.
 
-CONCEPT FRANÇAIS À EXPÉDUIR: "${frenchInput}"
+        CONCEPT FRANÇAIS À EXPÉDUIR: "${frenchInput}"
 
-PRIMITIFS DISPONIBLES (liste succincte, ne pas réécrire tout le détail) :
-${concepts
-  .map((c) => {
-    const props = (c.conceptProperties ?? [])
-      .map((cp: any) => cp.property?.name)
-      .filter(Boolean)
-      .join(', ');
-    return `- "${c.mot}" = ${c.definition} (type: ${c.type}${props ? `, propriétés: ${props}` : ''})`;
-  })
-  .join('\n')}
+        PRIMITIFS DISPONIBLES (liste succincte, ne pas réécrire tout le détail) :
+        ${concepts
+          .map((c) => {
+            const props = (c.conceptProperties ?? [])
+              .map((cp: any) => cp.property?.name)
+              .filter(Boolean)
+              .join(', ');
+            return `- "${c.mot}" = ${c.definition} (type: ${c.type}${props ? `, propriétés: ${props}` : ''})`;
+          })
+          .join('\n')}
 
-Tâche: proposer la meilleure composition (1 sens principal) qui exprime le concept français donné, en utilisant les primitives disponibles.
+        Tâche: proposer la meilleure composition (1 sens principal) qui exprime le concept français donné, en utilisant les primitives disponibles.
 
-FORMAT DE RÉPONSE (JSON STRICT, UNIQUEMENT):
-{
-  "sens": "sens principal",
-  "confidence": 0.0,
-  "justification": "raisonnement logique",
-  "examples": ["exemple d'usage 1"],
-  "alternatives": [
-    {"sens": "sens alternatif 1", "confidence": 0.0},
-    {"sens": "sens alternatif 2", "confidence": 0.0}
-  ],
-  "missing_concepts": ["nom_prochain_concept_si_manquant"],
-  "pattern": ["concept_id_1","concept_id_2",...],
-  "source": "llm"
-}
-RÉPONSE EN JSON UNIQUEMENT
-`;
+        FORMAT DE RÉPONSE (JSON STRICT, UNIQUEMENT):
+        {
+          "sens": "sens principal",
+          "confidence": 0.0,
+          "justification": "raisonnement logique",
+          "examples": ["exemple d'usage 1"],
+          "alternatives": [
+            {"sens": "sens alternatif 1", "confidence": 0.0},
+            {"sens": "sens alternatif 2", "confidence": 0.0}
+          ],
+          "missing_concepts": ["nom_prochain_concept_si_manquant"],
+          "pattern": ["concept_id_1","concept_id_2",...],
+          "source": "llm"
+        }
+        RÉPONSE EN JSON UNIQUEMENT
+        `;
 
     const response = await openai.chat.completions.create(buildLLMPromptRequest(prompt));
     const raw = response.choices?.[0]?.message?.content ?? '{}';

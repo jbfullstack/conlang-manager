@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
+import { fetch as signedFetch } from '@/utils/api-client';
 
 type UserRole = 'USER' | 'PREMIUM' | 'MODERATOR' | 'ADMIN';
 
@@ -51,7 +52,9 @@ export default function DevHeaderSwitcher() {
       setLoading(true);
       setErr(null);
       try {
-        const resp = await fetch(`/api/dev/resolve-user?username=${encodeURIComponent(username)}`);
+        const resp = await signedFetch(
+          `/api/dev/resolve-user?username=${encodeURIComponent(username)}`,
+        );
         if (!resp.ok) {
           const t = await resp.text().catch(() => '');
           throw new Error(`resolve-user ${resp.status} ${t}`);

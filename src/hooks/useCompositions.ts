@@ -1,14 +1,15 @@
 import { useEffect, useState, useCallback } from 'react';
+import { fetchCompositions } from '@/utils/api-client';
 
 export function useCompositions() {
   const [comps, setComps] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchCompositions = useCallback(async () => {
+  const fetch = useCallback(async () => {
     setLoading(true);
     try {
       console.log('📚 Fetching compositions...');
-      const response = await fetch('/api/compositions');
+      const response = await fetchCompositions();
       
       console.log('📚 Response status:', response.status, response.statusText);
       
@@ -49,12 +50,12 @@ export function useCompositions() {
   // AJOUTEZ CETTE FONCTION :
   const refreshCompositions = useCallback(async () => {
     console.log('🔄 Refreshing compositions...');
-    await fetchCompositions();
-  }, [fetchCompositions]);
+    await fetch();
+  }, [fetch]);
 
   useEffect(() => {
-    fetchCompositions();
-  }, [fetchCompositions]);
+    fetch();
+  }, [fetch]);
 
   return { 
     communityComps: comps, 

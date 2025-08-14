@@ -2,6 +2,7 @@
 
 import React, { useCallback, useMemo, useState } from 'react';
 import { Concept } from '@/interfaces/concept.interface';
+import { fetch as signedFetch } from '@/utils/api-client';
 
 import ConceptsAvailable from '@/app/components/features/composition/ConceptsAvailable';
 import CompositionsRecent from '@/app/components/features/composition/CompositionsRecent';
@@ -20,6 +21,11 @@ import { useCompositions } from '@/hooks/useCompositions';
 import { useCompositionPermissions } from '@/hooks/usePermissions';
 import { useDailyUsage } from '@/hooks/useDailyUsage';
 import { useAuth } from '@/hooks/useDevAuth';
+import {
+  fetchPostAnalyzeComposition,
+  fetchPostCompositions,
+  fetchPostSearchReverse,
+} from '@/utils/api-client';
 
 type CompositionResult = {
   sens: string;
@@ -117,11 +123,12 @@ export default function CompositionPage() {
     if (!aiReverseInput.trim()) return;
     setAiLoading(true);
     try {
-      const resp = await fetch('/api/search-reverse', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ frenchInput: aiReverseInput }),
-      });
+      // const resp = await fetch('/api/search-reverse', {
+      //   method: 'POST',
+      //   headers: { 'Content-Type': 'application/json' },
+      //   body: JSON.stringify({ frenchInput: aiReverseInput }),
+      // });
+      const resp = await fetchPostSearchReverse({ frenchInput: aiReverseInput });
       const data = await resp.json();
       const result: CompositionResult = {
         sens: data?.sens ?? '',
@@ -151,11 +158,12 @@ export default function CompositionPage() {
 
     setAiLoading(true);
     try {
-      const resp = await fetch('/api/analyze-composition', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ composition }),
-      });
+      // const resp = await fetch('/api/analyze-composition', {
+      //   method: 'POST',
+      //   headers: { 'Content-Type': 'application/json' },
+      //   body: JSON.stringify({ composition }),
+      // });
+      const resp = await fetchPostAnalyzeComposition({ composition });
       const data = await resp.json();
       setCompositionResult(data);
     } catch {
@@ -219,12 +227,7 @@ export default function CompositionPage() {
     };
 
     try {
-      const resp = await fetch('/api/compositions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
+      const resp = await fetchPostCompositions(payload);
       if (resp.status === 409) {
         const body = await resp.json();
         const existing = body.existing || body;
@@ -314,11 +317,7 @@ export default function CompositionPage() {
       confidenceScore: compositionResult?.confidence ?? 0,
     };
     try {
-      const resp = await fetch('/api/compositions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
+      const resp = await signedFetch('/api/compositions', 'POST', payload);
       if (resp.status === 409) {
         const body = await resp.json();
         const existing = body.existing || body;

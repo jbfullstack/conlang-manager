@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Concept } from '@/interfaces/concept.interface';
+import { fetchConcepts } from '@/utils/api-client';
 
 export function useConcepts() {
   const [concepts, setConcepts] = useState<Concept[]>([]);
@@ -7,7 +8,7 @@ export function useConcepts() {
 
   useEffect(() => {
     let aborted = false;
-    fetch('/api/concepts')
+    fetchConcepts()
       .then((r) => r.json())
       .then((data: any) => {
         if (aborted) return;

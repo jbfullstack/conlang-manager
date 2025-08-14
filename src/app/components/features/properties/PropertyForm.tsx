@@ -1,4 +1,5 @@
 import { Property } from '@/interfaces/property.interface';
+import { fetchPostProperties, fetchProperties } from '@/utils/api-client';
 import { useState, useEffect } from 'react';
 
 // interface Property {
@@ -58,7 +59,7 @@ export default function PropertyForm({ property, onSubmit, onCancel }: PropertyF
 
   const fetchExistingCategories = async () => {
     try {
-      const response = await fetch('/api/properties');
+      const response = await fetchProperties();
       if (response.ok) {
         const data = await response.json();
         const categories: string[] = Array.from(

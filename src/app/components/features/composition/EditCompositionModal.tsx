@@ -1,6 +1,7 @@
 'use client';
 import React, { useMemo, useState } from 'react';
 import { Concept } from '@/interfaces/concept.interface';
+import { fetch as signedFetch } from '@/utils/api-client';
 
 type Props = {
   isOpen: boolean;
@@ -51,11 +52,7 @@ export default function EditCompositionModal({
           .filter(Boolean),
       };
 
-      const resp = await fetch(`/api/compositions/${existing.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
+      const resp = await signedFetch(`/api/compositions/${existing.id}`, 'PUT', payload);
 
       if (resp.status === 409) {
         alert('Conflit: une autre composition porte déjà ce pattern.');

@@ -1,5 +1,6 @@
 import useSWR from 'swr';
 import { useAuth } from '@/hooks/useDevAuth';
+import { fetch as signedFetch } from '@/utils/api-client';
 
 export type Usage = {
   compositionsCreated: number;
@@ -21,11 +22,7 @@ export function useDailyUsage(userId?: string) {
     const id = uid ?? effectiveId;             
     if (!id) { console.warn('incrementComposition: called without userId — noop'); return; }
     await mutate(async () => {
-      const resp = await fetch(`/api/user/usage?userId=${id}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ increment: 'compositions' })
-      });
+      const resp = await signedFetch(`/api/user/usage?userId=${id}`,'POST',{ increment: 'compositions' });
       return await resp.json();
     }, { revalidate: false });
   };

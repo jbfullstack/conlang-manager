@@ -19,6 +19,8 @@ import {
   EmptyState,
   ContentContainer,
 } from '../components/ui/LoadingStates';
+import { fetchPropertiesCategories } from '@/utils/api-client';
+import { fetch as signedFetch } from '@/utils/api-client';
 
 interface PaginationInfo {
   page: number;
@@ -82,7 +84,7 @@ export default function PropertiesPage() {
       }
 
       const url = `/api/properties?${params.toString()}`;
-      const response = await fetch(url);
+      const response = await signedFetch(url);
 
       if (!response.ok) {
         throw new Error('Erreur lors du chargement des propriétés');
@@ -109,7 +111,7 @@ export default function PropertiesPage() {
 
   const fetchCategories = useCallback(async () => {
     try {
-      const response = await fetch('/api/properties/categories');
+      const response = await fetchPropertiesCategories();
       if (response.ok) {
         const data = await response.json();
         setAvailableCategories(data.categories || []);
@@ -167,9 +169,7 @@ export default function PropertiesPage() {
     }
 
     try {
-      const response = await fetch(`/api/properties/${id}`, {
-        method: 'DELETE',
-      });
+      const response = await signedFetch(`/api/properties/${id}`, 'DELETE');
 
       if (!response.ok) {
         const errorData = await response.json();
@@ -190,11 +190,7 @@ export default function PropertiesPage() {
       const url = editingProperty ? `/api/properties/${editingProperty.id}` : '/api/properties';
       const method = editingProperty ? 'PUT' : 'POST';
 
-      const response = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(propertyData),
-      });
+      const response = await signedFetch(url, method, propertyData);
 
       if (!response.ok) {
         const errorData = await response.json();

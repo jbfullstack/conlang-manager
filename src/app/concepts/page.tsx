@@ -18,6 +18,8 @@ import {
   EmptyState,
   ContentContainer,
 } from '@/app/components/ui/LoadingStates';
+import { fetchConceptsTypes } from '@/utils/api-client';
+import { fetch as signedFetch } from '@/utils/api-client';
 
 interface Concept {
   id: string;
@@ -89,7 +91,7 @@ export default function ConceptsPage() {
       }
 
       const url = `/api/concepts?${params.toString()}`;
-      const response = await fetch(url);
+      const response = await signedFetch(url);
 
       if (!response.ok) {
         throw new Error('Erreur lors du chargement des concepts');
@@ -116,7 +118,7 @@ export default function ConceptsPage() {
 
   const fetchTypes = useCallback(async () => {
     try {
-      const response = await fetch('/api/concepts/types');
+      const response = await fetchConceptsTypes();
       if (response.ok) {
         const data = await response.json();
         setAvailableTypes(data.types || []);
@@ -174,9 +176,7 @@ export default function ConceptsPage() {
     }
 
     try {
-      const response = await fetch(`/api/concepts/${id}`, {
-        method: 'DELETE',
-      });
+      const response = await signedFetch(`/api/concepts/${id}`, 'DELETE');
 
       if (!response.ok) {
         throw new Error('Erreur lors de la suppression');
@@ -196,11 +196,7 @@ export default function ConceptsPage() {
       const url = editingConcept ? `/api/concepts/${editingConcept.id}` : '/api/concepts';
       const method = editingConcept ? 'PUT' : 'POST';
 
-      const response = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(conceptData),
-      });
+      const response = await signedFetch(url, method, conceptData);
 
       if (!response.ok) {
         const errorData = await response.json();
@@ -346,4 +342,7 @@ export default function ConceptsPage() {
       )}
     </PageLayout>
   );
+}
+function awaitfetchConceptsTypes() {
+  throw new Error('Function not implemented.');
 }
