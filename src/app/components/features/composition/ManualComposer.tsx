@@ -180,40 +180,43 @@ export default function ManualComposer({
 
         {/* Form fields */}
         <div className="grid grid-cols-1 gap-4 sm:gap-6">
-          {/* Sens */}
-          <div>
-            <label className="block text-sm sm:text-base font-medium text-gray-700 mb-2 flex items-center gap-2">
-              <span className="text-lg">✹</span> Sens de la composition
-            </label>
-            <textarea
-              value={manualSens}
-              onChange={(e) => setManualSens(e.target.value)}
-              placeholder="Décrivez le sens de cette composition…"
-              className="w-full border-2 border-gray-300 rounded-lg sm:rounded-xl px-3 sm:px-4 py-2 sm:py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm sm:text-base bg-white/90 backdrop-blur-sm disabled:opacity-50 disabled:cursor-not-allowed"
-              rows={3}
-              disabled={disabled}
-            />
-          </div>
+          {/* Sens et Description sur la même ligne sur desktop */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
+            {/* Sens - plus étroit */}
+            <div className="md:col-span-1">
+              <label className="block text-sm sm:text-base font-medium text-gray-700 mb-2 flex items-center gap-2">
+                <span className="text-lg">✹</span> Sens de la composition
+              </label>
+              <textarea
+                value={manualSens}
+                onChange={(e) => setManualSens(e.target.value)}
+                placeholder="Décrivez le sens de cette composition…"
+                className="w-full border-2 border-gray-300 rounded-lg sm:rounded-xl px-3 sm:px-4 py-2 sm:py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm sm:text-base bg-white/90 backdrop-blur-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                rows={3}
+                disabled={disabled}
+              />
+            </div>
 
-          {/* Description */}
-          <div>
-            <label className="block text-sm sm:text-base font-medium text-gray-700 mb-2 flex items-center gap-2">
-              <span className="text-lg">✎</span> Description de la composition
-            </label>
-            <textarea
-              value={manualDescription}
-              onChange={(e) => setManualDescription(e.target.value)}
-              placeholder="Décrivez l’usage de cette composition…"
-              className="w-full border-2 border-gray-300 rounded-lg sm:rounded-xl px-3 sm:px-4 py-2 sm:py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm sm:text-base bg-white/90 backdrop-blur-sm disabled:opacity-50 disabled:cursor-not-allowed"
-              rows={3}
-              disabled={disabled}
-            />
+            {/* Description - plus large */}
+            <div className="md:col-span-2">
+              <label className="block text-sm sm:text-base font-medium text-gray-700 mb-2 flex items-center gap-2">
+                <span className="text-lg">✎</span> Description de la composition
+              </label>
+              <textarea
+                value={manualDescription}
+                onChange={(e) => setManualDescription(e.target.value)}
+                placeholder="Décrivez l'usage de cette composition…"
+                className="w-full border-2 border-gray-300 rounded-lg sm:rounded-xl px-3 sm:px-4 py-2 sm:py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm sm:text-base bg-white/90 backdrop-blur-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                rows={3}
+                disabled={disabled}
+              />
+            </div>
           </div>
 
           {/* Exemples */}
-          <div className="md:col-span-2">
+          <div>
             <label className="block text-sm sm:text-base font-medium text-gray-700 mb-2 flex items-center gap-2">
-              <span className="text-lg">✦</span> Exemples d’usage
+              <span className="text-lg">✦</span> Exemples d'usage
               <span className="ml-2 text-xs bg-gradient-to-r from-green-100 to-green-200 text-green-700 px-2 py-1 rounded-full border border-green-300">
                 {manualExamples.length} exemple{manualExamples.length !== 1 ? 's' : ''}
               </span>

@@ -18,14 +18,31 @@ export async function POST(request: NextRequest) {
     });
 
     const prompt = `
-      Tu es un linguiste expert en langue construite ET un créateur de lexique poétique. 
-      Ta tâche est de déterminer le sens dominant d'une composition donnée à partir des primitives ci-dessous, en évitant les combinaisons littérales ou triviales.
+      Tu es à la fois :
+      1. Linguiste expert en langue construite
+      2. Créateur de lexique poétique et culturel
 
-      ⚠️ INSTRUCTIONS PRÉCISES :
-      - Ne te contente pas de juxtaposer ou combiner directement les mots des primitives.
-      - Cherche un concept commun, un phénomène naturel, culturel, émotionnel ou symbolique qui résume la relation entre ces primitives.
-      - Privilégie des interprétations indirectes, métaphoriques ou connues dans les langues existantes (ex. "reflet" pour lumière + eau, "éclipse" pour soleil + obscurité).
-      - Si plusieurs interprétations sont possibles, choisis la plus universelle ou la plus expressive en premier.
+      Ta tâche : déterminer le sens dominant d'une composition donnée à partir des primitives ci-dessous, 
+      en appliquant STRICTEMENT la méthode suivante (dans cet ordre) :
+
+      ### MÉTHODE OBLIGATOIRE
+      1. **Analyser les primitives** : comprendre leur sens profond, leurs connotations, leurs usages.
+      2. **Chercher un lien culturel ou naturel connu** : 
+        - Phénomènes naturels (ex. éclipse, marée, mirage, reflet, halo, brume…)
+        - Concepts universels (ex. naissance, mort, cycle, lumière, ombre…)
+        - Objets/événements symboliques (ex. cérémonie, solstice, aurore…)
+      3. **Chercher un lien métaphorique ou poétique** :
+        - Images mentales, émotions, ambiances.
+        - Références mythologiques, artistiques, philosophiques.
+      4. **Seulement si aucune piste n’est pertinente**, proposer un sens descriptif direct ou combiné (ex. "eau lumineuse"), 
+        mais noter que c’est un choix par défaut, moins pertinent.
+      5. Choisir le sens le plus universel, expressif et culturellement riche.
+
+      ### EXEMPLES D'INTERPRÉTATION ATTENDUS
+      - Lumière + eau → "reflet" (pas "eau lumineuse")
+      - Soleil + obscurité → "éclipse" (pas "soleil sombre")
+      - Vent + sable → "tempête" ou "sirocco"
+      - Feu + ciel → "aurore" ou "éruption"
 
       COMPOSITION À ANALYSER :
       "${composition}"
@@ -37,7 +54,7 @@ export async function POST(request: NextRequest) {
 
       FORMAT DE RÉPONSE (JSON STRICT) :
       {
-        "sens": "sens principal proposé (abstrait ou métaphorique si possible)",
+        "sens": "sens principal proposé (culturel, naturel ou métaphorique si possible)",
         "confidence": 0.0,
         "justification": "raisonnement logique et sémantique",
         "examples": ["exemple d'usage 1"],
@@ -50,8 +67,9 @@ export async function POST(request: NextRequest) {
         "source": "llm"
       }
 
-      RÉPONSE EN JSON UNIQUEMENT
+      ⚠️ RÉPONSE EN JSON UNIQUEMENT — PAS DE TEXTE EN DEHORS DU JSON
       `;
+
 
 
     const response = await openai.chat.completions.create(buildLLMPromptRequest(prompt));
