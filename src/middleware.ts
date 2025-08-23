@@ -10,10 +10,12 @@ async function computeHmacHex(secretKey: string, payload: string): Promise<strin
     enc.encode(secretKey),
     { name: 'HMAC', hash: 'SHA-256' },
     false,
-    ['sign']
+    ['sign'],
   );
   const sig = await crypto.subtle.sign('HMAC', key, enc.encode(payload));
-  return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('');
+  return Array.from(new Uint8Array(sig))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
 }
 
 export async function middleware(req: NextRequest) {
@@ -23,12 +25,9 @@ export async function middleware(req: NextRequest) {
   // 2) preflight
   if (req.method === 'OPTIONS') return NextResponse.next();
 
-    // Exclusions : routes internes ou publiques
+  // Exclusions : routes internes ou publiques
   const path = req.nextUrl.pathname;
-  if (
-    path.startsWith('/api/dev') ||
-    path.startsWith('/api/auth')
-  ) {
+  if (path.startsWith('/api/dev') || path.startsWith('/api/auth')) {
     return NextResponse.next();
   }
 
@@ -79,22 +78,24 @@ export async function middleware(req: NextRequest) {
   }
 
   // 7) recomposition exacte du payload
-  const payload = `${req.method.toUpperCase()}|${req.nextUrl.pathname}${req.nextUrl.search}|${tsHeader}|${bodyText}`;
+  const payload = `${req.method.toUpperCase()}|${req.nextUrl.pathname}${
+    req.nextUrl.search
+  }|${tsHeader}|${bodyText}`;
   const computedSig = await computeHmacHex(secretKey, payload);
 
   if (computedSig !== sigHeader) {
-  console.error('******   [HMAC MISMATCH]', {
-    expectedPayload: payload,
-    expectedSig: computedSig,
-    receivedSig: sigHeader,
-    method: req.method,
-    path: req.nextUrl.pathname,
-    search: req.nextUrl.search,
-    ts: tsHeader,
-    bodyText,
-  });
-  return NextResponse.json({ error: 'Invalid signature' }, { status: 403 });
-}
+    console.error('******   [HMAC MISMATCH]', {
+      expectedPayload: payload,
+      expectedSig: computedSig,
+      receivedSig: sigHeader,
+      method: req.method,
+      path: req.nextUrl.pathname,
+      search: req.nextUrl.search,
+      ts: tsHeader,
+      bodyText,
+    });
+    return NextResponse.json({ error: 'Invalid signature' }, { status: 403 });
+  }
 
   // OK
   return NextResponse.next();
