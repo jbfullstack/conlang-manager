@@ -3,7 +3,7 @@ import { Inter } from 'next/font/google';
 import './globals.css';
 import { DevBanner } from '@/dev/dev-banner';
 import { SessionProvider } from './components/providers/SessionProvider';
-import DevHeaderSwitcher from '@/dev/dev-header-switcher';
+import ResponsiveNav from '@/app/components/ui/ResponsiveNav'; // Import du composant client séparé
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -17,45 +17,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="fr">
       <body className={inter.className}>
         <SessionProvider>
-          <div className="min-h-screen bg-gray-50">
+          <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50">
             {/* Banner de développement */}
             <DevBanner />
 
-            <nav className="bg-white shadow-sm border-b">
-              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div className="flex justify-between h-16">
-                  <div className="flex items-center">
-                    <h1 className="text-xl font-bold text-gray-900">Conlang Manager</h1>
-                  </div>
+            {/* Navigation responsive */}
+            <ResponsiveNav />
 
-                  <div className="flex items-center space-x-4">
-                    <a href="/dashboard" className="text-gray-600 hover:text-gray-900">
-                      Dashboard
-                    </a>
-                    <a href="/dictionary" className="text-gray-600 hover:text-gray-900">
-                      Dictionary
-                    </a>
-                    <a href="/concepts" className="text-gray-600 hover:text-gray-900">
-                      Concepts
-                    </a>
-                    <a href="/compositions" className="text-gray-600 hover:text-gray-900">
-                      Compositions
-                    </a>
-                    <a href="/properties" className="text-gray-600 hover:text-gray-900">
-                      Propriétés
-                    </a>
-
-                    {/* Séparateur visuel */}
-                    <div className="h-6 w-px bg-gray-200"></div>
-
-                    {/* Switcher d'utilisateur de dev dans le header */}
-                    <DevHeaderSwitcher />
-                  </div>
-                </div>
-              </div>
-            </nav>
-
-            <main>{children}</main>
+            {/* Contenu principal */}
+            <main className="relative">{children}</main>
           </div>
         </SessionProvider>
       </body>

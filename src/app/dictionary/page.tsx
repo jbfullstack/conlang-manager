@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import clsx from 'clsx';
 import { fetch as signedFetch, updateComposition, deleteComposition } from '@/utils/api-client';
+import Pagination from '@/app/components/ui/Pagination'; // ⚠️ Remplacer par la version améliorée avec props `compact` et `variant`
 
 type Scope = 'all' | 'concepts' | 'combinations';
 type Lang = 'all' | 'conlang' | 'fr';
@@ -31,8 +32,12 @@ export default function DictionaryPage() {
   const [scope, setScope] = useState<Scope>('all');
   const [lang, setLang] = useState<Lang>('all');
   const [status, setStatus] = useState(''); // '' = tous
-  const [page, setPage] = useState(1);
-  const pageSize = 20;
+
+  // États de pagination séparés
+  const [conceptsPage, setConceptsPage] = useState(1);
+  const [conceptsPageSize, setConceptsPageSize] = useState(12);
+  const [combinationsPage, setCombinationsPage] = useState(1);
+  const [combinationsPageSize, setCombinationsPageSize] = useState(12);
 
   const [loading, setLoading] = useState(false);
   const [concepts, setConcepts] = useState<Concept[]>([]);
@@ -46,36 +51,72 @@ export default function DictionaryPage() {
     return () => clearTimeout(t);
   }, [q]);
 
-  // URL signée (sans toucher window)
-  const queryUrl = useMemo(() => {
+  // URL signée pour concepts
+  const conceptsQueryUrl = useMemo(() => {
+    if (scope === 'combinations') return null;
     const qs = new URLSearchParams();
     qs.set('q', debouncedQ);
-    qs.set('scope', scope);
+    qs.set('scope', 'concepts');
+    qs.set('lang', lang);
+    qs.set('page', String(conceptsPage));
+    qs.set('pageSize', String(conceptsPageSize));
+    return `/api/dictionary/search?${qs.toString()}`;
+  }, [debouncedQ, lang, conceptsPage, conceptsPageSize, scope]);
+
+  // URL signée pour combinations
+  const combinationsQueryUrl = useMemo(() => {
+    if (scope === 'concepts') return null;
+    const qs = new URLSearchParams();
+    qs.set('q', debouncedQ);
+    qs.set('scope', 'combinations');
     qs.set('lang', lang);
     if (status) qs.set('status', status);
-    qs.set('page', String(page));
-    qs.set('pageSize', String(pageSize));
+    qs.set('page', String(combinationsPage));
+    qs.set('pageSize', String(combinationsPageSize));
     return `/api/dictionary/search?${qs.toString()}`;
-  }, [debouncedQ, scope, lang, status, page]);
+  }, [debouncedQ, lang, status, combinationsPage, combinationsPageSize, scope]);
+
+  const fetchConcepts = useCallback(async () => {
+    if (!conceptsQueryUrl) return;
+    try {
+      const res = await signedFetch(conceptsQueryUrl, 'GET');
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      setConcepts(data.concepts || []);
+      setCounts((prev) => ({ ...prev, concepts: data.counts?.concepts || 0 }));
+    } catch (e) {
+      console.error('concepts fetch error', e);
+      setConcepts([]);
+    }
+  }, [conceptsQueryUrl]);
+
+  const fetchCombinations = useCallback(async () => {
+    if (!combinationsQueryUrl) return;
+    try {
+      const res = await signedFetch(combinationsQueryUrl, 'GET');
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      setCombinations(data.combinations || []);
+      setCounts((prev) => ({ ...prev, combinations: data.counts?.combinations || 0 }));
+    } catch (e) {
+      console.error('combinations fetch error', e);
+      setCombinations([]);
+    }
+  }, [combinationsQueryUrl]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await signedFetch(queryUrl, 'GET');
-      if (!res.ok) throw new Error(await res.text());
-      const data = await res.json();
-      setConcepts(data.concepts || []);
-      setCombinations(data.combinations || []); // ✅ clé "combinations"
-      setCounts(data.counts || { concepts: 0, combinations: 0 });
-    } catch (e) {
-      console.error('dictionary fetch error', e);
+      await Promise.all([fetchConcepts(), fetchCombinations()]);
     } finally {
       setLoading(false);
     }
-  }, [queryUrl]);
+  }, [fetchConcepts, fetchCombinations]);
 
+  // Reset pagination when filters change
   useEffect(() => {
-    setPage(1);
+    setConceptsPage(1);
+    setCombinationsPage(1);
   }, [debouncedQ, scope, lang, status]);
 
   useEffect(() => {
@@ -87,7 +128,7 @@ export default function DictionaryPage() {
     if (!confirm('Supprimer cette combination ?')) return;
     try {
       await deleteComposition(id); // route existante
-      fetchData();
+      fetchCombinations(); // Refresh seulement les combinations
     } catch (e) {
       console.warn('delete combination failed', e);
     }
@@ -96,7 +137,7 @@ export default function DictionaryPage() {
   const onChangeStatus = async (id: string, newStatus: string) => {
     try {
       await updateComposition(id, { statut: newStatus });
-      fetchData();
+      fetchCombinations(); // Refresh seulement les combinations
     } catch (e) {
       console.warn('update status failed', e);
     }
@@ -121,8 +162,12 @@ export default function DictionaryPage() {
     if (!editing) return;
     await updateComposition(editing.id, values);
     setEditing(null);
-    fetchData();
+    fetchCombinations(); // Refresh seulement les combinations
   };
+
+  // Calculs de pagination
+  const conceptsTotalPages = Math.ceil(counts.concepts / conceptsPageSize);
+  const combinationsTotalPages = Math.ceil(counts.combinations / combinationsPageSize);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50">
@@ -135,7 +180,7 @@ export default function DictionaryPage() {
               Dictionnaire
             </h1>
 
-            <div className="flex items-center space-x-2 sm:space-x-4 text-xs sm:text-sm text-gray-600">
+            <div className="flex flex-wrap items-center justify-center sm:justify-end gap-2 text-xs sm:text-sm text-gray-600">
               <div className="flex items-center bg-blue-50 px-2 sm:px-3 py-1 rounded-full">
                 <span className="mr-1">🔤</span>
                 <span className="font-medium">{counts.concepts}</span>
@@ -209,33 +254,46 @@ export default function DictionaryPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
           {(scope === 'all' || scope === 'concepts') && (
             <ResultSection
-              title="🔤 Concepts"
+              title="Concepts"
+              emoji="🔤"
               count={counts.concepts}
               loading={loading}
               emptyLabel="Aucun concept trouvé"
             >
-              <div className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 gap-3 mb-6">
                 {concepts.map((c) => (
                   <ConceptItem key={c.id} item={c} />
                 ))}
               </div>
-              <Pagination
-                page={page}
-                pageSize={pageSize}
-                total={counts.concepts}
-                onPage={setPage}
-              />
+
+              {counts.concepts > 0 && (
+                <Pagination
+                  currentPage={conceptsPage}
+                  totalPages={conceptsTotalPages}
+                  totalCount={counts.concepts}
+                  pageSize={conceptsPageSize}
+                  onPageChange={setConceptsPage}
+                  onPageSizeChange={(newSize) => {
+                    setConceptsPageSize(newSize);
+                    setConceptsPage(1); // Reset to page 1 when page size changes
+                  }}
+                  loading={loading}
+                  compact={true}
+                  variant="glassmorphic"
+                />
+              )}
             </ResultSection>
           )}
 
           {(scope === 'all' || scope === 'combinations') && (
             <ResultSection
-              title="🧩 Compositions"
+              title="Compositions"
+              emoji="🧩"
               count={counts.combinations}
               loading={loading}
               emptyLabel="Aucune composition trouvée"
             >
-              <div className="space-y-3">
+              <div className="space-y-3 mb-6">
                 {combinations.map((cmb) => (
                   <CombinationItem
                     key={cmb.id}
@@ -246,12 +304,23 @@ export default function DictionaryPage() {
                   />
                 ))}
               </div>
-              <Pagination
-                page={page}
-                pageSize={pageSize}
-                total={counts.combinations}
-                onPage={setPage}
-              />
+
+              {counts.combinations > 0 && (
+                <Pagination
+                  currentPage={combinationsPage}
+                  totalPages={combinationsTotalPages}
+                  totalCount={counts.combinations}
+                  pageSize={combinationsPageSize}
+                  onPageChange={setCombinationsPage}
+                  onPageSizeChange={(newSize) => {
+                    setCombinationsPageSize(newSize);
+                    setCombinationsPage(1); // Reset to page 1 when page size changes
+                  }}
+                  loading={loading}
+                  compact={true}
+                  variant="glassmorphic"
+                />
+              )}
             </ResultSection>
           )}
         </div>
@@ -284,21 +353,23 @@ function Segmented({
   options: { value: string; label: string }[];
 }) {
   return (
-    <div className="inline-flex bg-white/80 backdrop-blur-sm rounded-xl border border-gray-200 p-1 shadow-sm">
-      {options.map((o) => (
-        <button
-          key={o.value}
-          onClick={() => onChange(o.value)}
-          className={clsx(
-            'px-3 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all transform',
-            value === o.value
-              ? 'bg-gradient-to-r from-blue-500 to-purple-500 text-white shadow-md scale-105'
-              : 'text-gray-600 hover:text-gray-800 hover:bg-white/70 hover:shadow-sm',
-          )}
-        >
-          {o.label}
-        </button>
-      ))}
+    <div className="w-full">
+      <div className="inline-flex w-full bg-white/80 backdrop-blur-sm rounded-xl border border-gray-200 p-1 shadow-sm overflow-hidden">
+        {options.map((o) => (
+          <button
+            key={o.value}
+            onClick={() => onChange(o.value)}
+            className={clsx(
+              'flex-1 px-2 sm:px-3 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all transform text-center',
+              value === o.value
+                ? 'bg-gradient-to-r from-blue-500 to-purple-500 text-white shadow-md scale-105'
+                : 'text-gray-600 hover:text-gray-800 hover:bg-white/70 hover:shadow-sm',
+            )}
+          >
+            <span className="truncate">{o.label}</span>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -307,7 +378,7 @@ function StatusSelect({ value, onChange }: { value: string; onChange: (v: string
   const options = ['', 'draft', 'in_progress', 'done'];
   return (
     <select
-      className="rounded-xl border border-gray-200 bg-white/80 backdrop-blur-sm px-3 py-2 text-sm
+      className="w-full rounded-xl border border-gray-200 bg-white/80 backdrop-blur-sm px-3 py-2 text-xs sm:text-sm
                  focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all"
       value={value}
       onChange={(e) => onChange(e.target.value)}
@@ -322,12 +393,14 @@ function StatusSelect({ value, onChange }: { value: string; onChange: (v: string
 
 function ResultSection({
   title,
+  emoji,
   count,
   loading,
   emptyLabel,
   children,
 }: {
   title: string;
+  emoji?: string;
   count: number;
   loading: boolean;
   emptyLabel: string;
@@ -339,8 +412,11 @@ function ResultSection({
                     transition-all hover:shadow-2xl animate-slideInUp"
     >
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg sm:text-xl font-bold bg-gradient-to-r from-gray-700 to-gray-900 bg-clip-text text-transparent">
-          {title} <span className="text-sm font-normal text-gray-400">({count})</span>
+        <h2 className="text-lg sm:text-xl font-bold flex items-center">
+          {emoji && <span className="mr-2 text-xl sm:text-2xl">{emoji}</span>}
+          <span className="bg-gradient-to-r from-gray-700 to-gray-900 bg-clip-text text-transparent">
+            {title} <span className="text-sm font-normal text-gray-400">({count})</span>
+          </span>
         </h2>
         {loading && (
           <div className="animate-spin h-5 w-5 border-2 border-blue-500 border-t-transparent rounded-full" />
@@ -364,14 +440,14 @@ function ResultSection({
 function ConceptItem({ item }: { item: Concept }) {
   return (
     <div
-      className="bg-white/90 backdrop-blur-sm rounded-xl border border-gray-100 p-4 
+      className="bg-white/90 backdrop-blur-sm rounded-xl border border-gray-100 p-3 sm:p-4 
                     hover:shadow-lg hover:scale-[1.02] transition-all transform animate-slideInUp"
     >
-      <div className="flex items-start justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="font-semibold text-gray-900 truncate mb-1">{item.mot}</div>
           <div className="text-sm text-gray-600 mb-2">{item.definition}</div>
-          <div className="flex items-center space-x-2">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
               {item.type}
             </span>
@@ -392,9 +468,9 @@ function ConceptItem({ item }: { item: Concept }) {
 
 function StatusPill({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const opts: Array<{ v: string; label: string; cls: string }> = [
-    { v: 'draft', label: '📝 Brouillon', cls: 'bg-yellow-100 text-yellow-800 border-yellow-200' },
-    { v: 'in_progress', label: '🚧 En cours', cls: 'bg-blue-100 text-blue-800 border-blue-200' },
-    { v: 'done', label: '✅ Terminé', cls: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
+    { v: 'draft', label: '📝', cls: 'bg-yellow-100 text-yellow-800 border-yellow-200' },
+    { v: 'in_progress', label: '🚧', cls: 'bg-blue-100 text-blue-800 border-blue-200' },
+    { v: 'done', label: '✅', cls: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
   ];
 
   return (
@@ -404,13 +480,21 @@ function StatusPill({ value, onChange }: { value: string; onChange: (v: string) 
           key={o.v}
           onClick={() => onChange(o.v)}
           className={clsx(
-            'px-3 py-1 rounded-lg text-xs font-medium transition-all transform',
+            'px-2 sm:px-3 py-1 rounded-lg text-xs font-medium transition-all transform',
             value === o.v
               ? clsx('shadow-sm scale-105 border', o.cls)
               : 'text-gray-600 hover:text-gray-800 hover:bg-white hover:shadow-sm',
           )}
+          title={o.v === 'draft' ? 'Brouillon' : o.v === 'in_progress' ? 'En cours' : 'Terminé'}
         >
-          {o.label}
+          <span className="sm:hidden">{o.label}</span>
+          <span className="hidden sm:inline">
+            {o.v === 'draft'
+              ? '📝 Brouillon'
+              : o.v === 'in_progress'
+              ? '🚧 En cours'
+              : '✅ Terminé'}
+          </span>
         </button>
       ))}
     </div>
@@ -457,10 +541,10 @@ function CombinationItem({
 
   return (
     <div
-      className="bg-white/90 backdrop-blur-sm rounded-xl border border-gray-100 p-4 
+      className="bg-white/90 backdrop-blur-sm rounded-xl border border-gray-100 p-3 sm:p-4 
                     hover:shadow-lg hover:scale-[1.02] transition-all transform animate-slideInUp"
     >
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col gap-3">
         <div className="min-w-0 flex-1">
           <div className="font-semibold text-gray-900 truncate mb-1">{item.sens}</div>
           {item.description && <div className="text-sm text-gray-600 mb-2">{item.description}</div>}
@@ -472,9 +556,9 @@ function CombinationItem({
           ) : null}
         </div>
 
-        <div className="flex flex-col space-y-2">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <StatusPill value={item.statut} onChange={onStatus} />
-          <div className="flex space-x-1">
+          <div className="flex space-x-2 justify-end">
             <button
               className="px-3 py-1 rounded-lg bg-gradient-to-r from-amber-400 to-orange-400 text-white 
                          hover:from-amber-500 hover:to-orange-500 transition-all transform hover:scale-105 
@@ -496,51 +580,6 @@ function CombinationItem({
           </div>
         </div>
       </div>
-    </div>
-  );
-}
-
-function Pagination({
-  page,
-  pageSize,
-  total,
-  onPage,
-}: {
-  page: number;
-  pageSize: number;
-  total: number;
-  onPage: (p: number) => void;
-}) {
-  const max = Math.max(1, Math.ceil(total / pageSize));
-  if (max <= 1) return null;
-
-  return (
-    <div className="flex items-center justify-center space-x-2 mt-6 pt-4 border-t border-gray-100">
-      <button
-        className="px-4 py-2 rounded-lg bg-white/80 backdrop-blur-sm border border-gray-200 text-sm
-                   hover:bg-gradient-to-r hover:from-blue-500 hover:to-purple-500 hover:text-white 
-                   transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
-        disabled={page <= 1}
-        onClick={() => onPage(page - 1)}
-      >
-        ← Précédent
-      </button>
-
-      <div className="flex items-center bg-white/80 backdrop-blur-sm px-3 py-2 rounded-lg border border-gray-200">
-        <span className="text-sm font-medium text-gray-600">
-          {page} / {max}
-        </span>
-      </div>
-
-      <button
-        className="px-4 py-2 rounded-lg bg-white/80 backdrop-blur-sm border border-gray-200 text-sm
-                   hover:bg-gradient-to-r hover:from-blue-500 hover:to-purple-500 hover:text-white 
-                   transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
-        disabled={page >= max}
-        onClick={() => onPage(page + 1)}
-      >
-        Suivant →
-      </button>
     </div>
   );
 }
@@ -582,10 +621,10 @@ function EditCombinationModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="w-full max-w-lg bg-white/90 backdrop-blur-md rounded-2xl shadow-2xl border border-white/20 p-6 m-4 animate-scaleIn">
-        <div className="flex items-center justify-between mb-6">
-          <h3 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+      <div className="w-full max-w-lg bg-white/90 backdrop-blur-md rounded-2xl shadow-2xl border border-white/20 p-4 sm:p-6 animate-scaleIn max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-4 sm:mb-6">
+          <h3 className="text-lg sm:text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
             ✏️ Éditer la composition
           </h3>
           <button
@@ -600,7 +639,7 @@ function EditCombinationModal({
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Sens (français)</label>
             <input
-              className="w-full rounded-xl border border-gray-200 bg-white/80 px-4 py-3 
+              className="w-full rounded-xl border border-gray-200 bg-white/80 px-3 sm:px-4 py-2 sm:py-3 text-sm
                          focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all"
               value={sens}
               onChange={(e) => setSens(e.target.value)}
@@ -610,8 +649,8 @@ function EditCombinationModal({
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
             <textarea
-              className="w-full rounded-xl border border-gray-200 bg-white/80 px-4 py-3 
-                         focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all"
+              className="w-full rounded-xl border border-gray-200 bg-white/80 px-3 sm:px-4 py-2 sm:py-3 text-sm
+                         focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all resize-none"
               rows={3}
               value={desc}
               onChange={(e) => setDesc(e.target.value)}
@@ -624,9 +663,9 @@ function EditCombinationModal({
           </div>
         </div>
 
-        <div className="flex justify-end space-x-3 mt-6 pt-4 border-t border-gray-100">
+        <div className="flex flex-col sm:flex-row justify-end gap-3 mt-4 sm:mt-6 pt-4 border-t border-gray-100">
           <button
-            className="px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors font-medium"
+            className="w-full sm:w-auto px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors font-medium order-2 sm:order-1"
             onClick={onClose}
           >
             Annuler
@@ -634,12 +673,12 @@ function EditCombinationModal({
           <button
             onClick={onSubmit}
             disabled={saving}
-            className="px-6 py-2 rounded-lg bg-gradient-to-r from-blue-500 to-purple-500 text-white 
+            className="w-full sm:w-auto px-4 sm:px-6 py-2 rounded-lg bg-gradient-to-r from-blue-500 to-purple-500 text-white 
                        hover:from-blue-600 hover:to-purple-600 transition-all transform hover:scale-105 
-                       disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-lg"
+                       disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-lg order-1 sm:order-2"
           >
             {saving ? (
-              <span className="flex items-center">
+              <span className="flex items-center justify-center">
                 <div className="animate-spin h-4 w-4 border border-white border-t-transparent rounded-full mr-2"></div>
                 Enregistrement...
               </span>
