@@ -35,9 +35,9 @@ export default function DictionaryPage() {
 
   // États de pagination séparés
   const [conceptsPage, setConceptsPage] = useState(1);
-  const [conceptsPageSize, setConceptsPageSize] = useState(12);
+  const [conceptsPageSize, setConceptsPageSize] = useState(4);
   const [combinationsPage, setCombinationsPage] = useState(1);
-  const [combinationsPageSize, setCombinationsPageSize] = useState(12);
+  const [combinationsPageSize, setCombinationsPageSize] = useState(4);
 
   const [loading, setLoading] = useState(false);
   const [concepts, setConcepts] = useState<Concept[]>([]);

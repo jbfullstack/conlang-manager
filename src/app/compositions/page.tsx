@@ -608,6 +608,9 @@ export default function CompositionPage() {
                   compositionChips={compositionChips}
                   onAnalyzeFromSelection={handleAnalyzeFromSelection}
                   loading={aiLoading}
+                  onMoveLeft={moveLeft}
+                  onMoveRight={moveRight}
+                  onRemoveAt={removeAt}
                 />
               ) : (
                 <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-lg border border-gray-200 p-8 text-center">

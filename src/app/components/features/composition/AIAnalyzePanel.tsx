@@ -7,6 +7,11 @@ type Props = {
   compositionChips?: string;
   onAnalyzeFromSelection?: () => void;
   loading?: boolean;
+
+  // NEW: actions optionnelles pour rendre les chips ordonnables
+  onMoveLeft?: (index: number) => void;
+  onMoveRight?: (index: number) => void;
+  onRemoveAt?: (index: number) => void;
 };
 
 export default function AIAnalyzePanel({
@@ -14,9 +19,17 @@ export default function AIAnalyzePanel({
   compositionChips = '',
   onAnalyzeFromSelection,
   loading = false,
+
+  // NEW
+  onMoveLeft,
+  onMoveRight,
+  onRemoveAt,
 }: Props) {
   const hasSelection = selectedConcepts.length > 0;
   const canAnalyze = hasSelection && !loading;
+
+  // NEW: si les 3 handlers existent, on active le rendu interactif
+  const interactive = !!(onMoveLeft && onMoveRight && onRemoveAt);
 
   return (
     <div className="bg-white/80 backdrop-blur-sm rounded-xl sm:rounded-2xl shadow-xl border border-white/20 p-4 sm:p-6">
@@ -45,21 +58,72 @@ export default function AIAnalyzePanel({
         ) : (
           <div className="space-y-3 sm:space-y-4">
             {/* Affichage des concepts sélectionnés */}
-            <div className="flex items-center space-x-2 flex-wrap gap-2">
-              {selectedConcepts.map((concept, i) => (
-                <React.Fragment key={concept.id}>
-                  <div className="inline-flex items-center space-x-1 sm:space-x-2 px-2 sm:px-3 py-1 sm:py-2 rounded-full text-xs sm:text-sm text-white bg-gradient-to-r from-blue-500 to-purple-500 shadow-sm">
-                    <span className="font-medium">{concept.mot}</span>
-                    <span className="text-xs opacity-75 hidden sm:inline">
-                      ({concept.definition?.substring(0, 20)}...)
+            {interactive ? (
+              <div className="flex flex-wrap gap-2">
+                {selectedConcepts.map((c, i) => (
+                  <div
+                    key={`${c.id}-${i}`}
+                    className="group inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full shadow-sm border border-indigo-200 bg-gradient-to-r from-white to-indigo-50/70 hover:from-indigo-50 hover:to-white transition-colors"
+                    title={`Position ${i + 1}`}
+                  >
+                    <span className="text-[11px] sm:text-xs font-semibold text-indigo-700">
+                      {c.mot}
                     </span>
+                    {c.definition && (
+                      <span className="hidden sm:inline text-[10px] text-indigo-800/70 ml-0.5">
+                        ({c.definition.substring(0, 14)}…)
+                      </span>
+                    )}
+
+                    <div className="flex items-center gap-0.5 ml-1">
+                      <button
+                        className="h-6 w-6 inline-flex items-center justify-center rounded-full border border-indigo-200/70 bg-white/80 hover:bg-indigo-50 text-indigo-700 text-xs disabled:opacity-40"
+                        onClick={() => onMoveLeft?.(i)}
+                        disabled={i === 0}
+                        aria-label="Déplacer à gauche"
+                        title="Déplacer à gauche"
+                      >
+                        ◀
+                      </button>
+                      <button
+                        className="h-6 w-6 inline-flex items-center justify-center rounded-full border border-indigo-200/70 bg-white/80 hover:bg-indigo-50 text-indigo-700 text-xs disabled:opacity-40"
+                        onClick={() => onMoveRight?.(i)}
+                        disabled={i === selectedConcepts.length - 1}
+                        aria-label="Déplacer à droite"
+                        title="Déplacer à droite"
+                      >
+                        ▶
+                      </button>
+                      <button
+                        className="h-6 w-6 inline-flex items-center justify-center rounded-full border border-rose-200 bg-white/80 hover:bg-rose-50 text-rose-600 text-xs"
+                        onClick={() => onRemoveAt?.(i)}
+                        aria-label="Retirer"
+                        title="Retirer"
+                      >
+                        ✕
+                      </button>
+                    </div>
                   </div>
-                  {i < selectedConcepts.length - 1 && (
-                    <span className="text-blue-500 text-lg sm:text-xl animate-pulse">➕</span>
-                  )}
-                </React.Fragment>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              // Fallback : rendu “ancien” (aucune régression)
+              <div className="flex items-center space-x-2 flex-wrap gap-2">
+                {selectedConcepts.map((concept, i) => (
+                  <React.Fragment key={concept.id}>
+                    <div className="inline-flex items-center space-x-1 sm:space-x-2 px-2 sm:px-3 py-1 sm:py-2 rounded-full text-xs sm:text-sm text-white bg-gradient-to-r from-blue-500 to-purple-500 shadow-sm">
+                      <span className="font-medium">{concept.mot}</span>
+                      <span className="text-xs opacity-75 hidden sm:inline">
+                        ({concept.definition?.substring(0, 20)}...)
+                      </span>
+                    </div>
+                    {i < selectedConcepts.length - 1 && (
+                      <span className="text-blue-500 text-lg sm:text-xl animate-pulse">➕</span>
+                    )}
+                  </React.Fragment>
+                ))}
+              </div>
+            )}
 
             {/* Pattern résultant */}
             <div className="p-3 sm:p-4 bg-white/80 backdrop-blur-sm rounded-lg sm:rounded-xl border border-purple-200 shadow-sm">

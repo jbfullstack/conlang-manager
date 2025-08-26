@@ -13,16 +13,15 @@ export default function ConceptsAvailable({ concepts, onSelect, pageSize = 6 }: 
   const [page, setPage] = useState(1);
   const [selectedConcepts, setSelectedConcepts] = useState<Set<string>>(new Set());
 
+  // NEW: petit état pour le “flash” visuel d’accusé de clic
+  const [clickFlashIds, setClickFlashIds] = useState<Set<string>>(new Set());
+
   const totalPages = Math.max(1, Math.ceil(concepts.length / pageSize));
 
   const pagedConcepts = useMemo(
     () => concepts.slice((page - 1) * pageSize, page * pageSize),
     [concepts, page, pageSize],
   );
-
-  pagedConcepts.map((concept) => {
-    console.log(`${JSON.stringify(concept)}`);
-  });
 
   const canPrev = page > 1;
   const canNext = page < totalPages;
@@ -37,6 +36,21 @@ export default function ConceptsAvailable({ concepts, onSelect, pageSize = 6 }: 
       }
       return newSet;
     });
+
+    // NEW: flash court (ack visuel du clic, même en “désélection”)
+    setClickFlashIds((prev) => {
+      const ns = new Set(prev);
+      ns.add(concept.id);
+      return ns;
+    });
+    setTimeout(() => {
+      setClickFlashIds((prev) => {
+        const ns = new Set(prev);
+        ns.delete(concept.id);
+        return ns;
+      });
+    }, 300);
+
     onSelect?.(concept);
   };
 
@@ -50,17 +64,6 @@ export default function ConceptsAvailable({ concepts, onSelect, pageSize = 6 }: 
     };
     return colors[type as keyof typeof colors] || 'from-gray-400 to-gray-600';
   };
-
-  // const getTypeIcon = (type: string) => {
-  //   const icons = {
-  //     element: '🧊',
-  //     action: '🏃‍♂️',
-  //     qualite: '✨',
-  //     relation: '🔗',
-  //     abstrait: '💭',
-  //   };
-  //   return icons[type as keyof typeof icons] || '📄';
-  // };
 
   return (
     <div className="bg-white/80 backdrop-blur-sm rounded-xl sm:rounded-2xl shadow-xl border border-white/20 p-4 sm:p-6 h-fit sticky top-4">
@@ -81,6 +84,8 @@ export default function ConceptsAvailable({ concepts, onSelect, pageSize = 6 }: 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 gap-2 sm:gap-3 mb-4">
         {pagedConcepts.map((concept) => {
           const isSelected = selectedConcepts.has(concept.id);
+          const isFlashing = clickFlashIds.has(concept.id);
+
           return (
             <button
               key={concept.id}
@@ -89,7 +94,7 @@ export default function ConceptsAvailable({ concepts, onSelect, pageSize = 6 }: 
                 isSelected
                   ? 'border-blue-400 bg-gradient-to-br from-blue-50 to-purple-50 shadow-md'
                   : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gradient-to-br hover:from-gray-50 hover:to-blue-50'
-              }`}
+              } ${isFlashing ? 'ring-2 ring-blue-400/60' : ''}`}
             >
               {/* Badge de type */}
               <div
@@ -130,9 +135,14 @@ export default function ConceptsAvailable({ concepts, onSelect, pageSize = 6 }: 
                 </div>
               </div>
 
-              {/* Effet de sélection */}
+              {/* Effet de sélection (existant) */}
               {isSelected && (
                 <div className="absolute inset-0 bg-gradient-to-r from-blue-400/20 to-purple-400/20 rounded-lg sm:rounded-xl animate-pulse"></div>
+              )}
+
+              {/* NEW: ping court au clic (même si on “désélectionne”) */}
+              {isFlashing && (
+                <span className="pointer-events-none absolute inset-0 rounded-lg sm:rounded-xl animate-ping opacity-40 bg-blue-300/20"></span>
               )}
             </button>
           );
