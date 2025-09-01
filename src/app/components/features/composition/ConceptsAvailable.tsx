@@ -1,5 +1,5 @@
 'use client';
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Concept } from '@/interfaces/concept.interface';
 import { getConceptTypeIcon } from '@/lib/concept-types-utils';
 
@@ -11,10 +11,15 @@ type Props = {
 
 export default function ConceptsAvailable({ concepts, onSelect, pageSize = 6 }: Props) {
   const [page, setPage] = useState(1);
-  const [selectedConcepts, setSelectedConcepts] = useState<Set<string>>(new Set());
 
-  // NEW: petit état pour le “flash” visuel d’accusé de clic
+  // Remplace l'ancien "selectedConcepts" (toggle persistant) par une sélection TRANSITOIRE
+  const [transientSelectedIds, setTransientSelectedIds] = useState<Set<string>>(new Set());
+
+  // Petit halo de clic (anneau) pour bien marquer l'action
   const [clickFlashIds, setClickFlashIds] = useState<Set<string>>(new Set());
+
+  // Timers par carte pour nettoyer proprement les états transitoires
+  const timersRef = useRef<Map<string, number>>(new Map());
 
   const totalPages = Math.max(1, Math.ceil(concepts.length / pageSize));
 
@@ -26,31 +31,55 @@ export default function ConceptsAvailable({ concepts, onSelect, pageSize = 6 }: 
   const canPrev = page > 1;
   const canNext = page < totalPages;
 
-  const handleSelect = (concept: Concept) => {
-    setSelectedConcepts((prev) => {
-      const newSet = new Set(prev);
-      if (newSet.has(concept.id)) {
-        newSet.delete(concept.id);
-      } else {
-        newSet.add(concept.id);
-      }
-      return newSet;
-    });
+  const ACK_MS = 250; // durée de l'ack visuel “sélection”
 
-    // NEW: flash court (ack visuel du clic, même en “désélection”)
-    setClickFlashIds((prev) => {
+  const startTransientSelect = (id: string) => {
+    setTransientSelectedIds((prev) => {
       const ns = new Set(prev);
-      ns.add(concept.id);
+      ns.add(id);
       return ns;
     });
-    setTimeout(() => {
-      setClickFlashIds((prev) => {
+
+    // Clear d'un ancien timer si multi-clic
+    const old = timersRef.current.get(id);
+    if (old) {
+      window.clearTimeout(old);
+    }
+
+    const t = window.setTimeout(() => {
+      setTransientSelectedIds((prev) => {
         const ns = new Set(prev);
-        ns.delete(concept.id);
+        ns.delete(id);
         return ns;
       });
-    }, 300);
+      timersRef.current.delete(id);
+    }, ACK_MS);
 
+    timersRef.current.set(id, t as unknown as number);
+  };
+
+  const flashClick = (id: string) => {
+    setClickFlashIds((prev) => {
+      const ns = new Set(prev);
+      ns.add(id);
+      return ns;
+    });
+    window.setTimeout(() => {
+      setClickFlashIds((prev) => {
+        const ns = new Set(prev);
+        ns.delete(id);
+        return ns;
+      });
+    }, ACK_MS + 70);
+  };
+
+  const handleSelect = (concept: Concept) => {
+    // Sélection brève -> retour auto
+    startTransientSelect(concept.id);
+    // Halo court (anneau/ping)
+    flashClick(concept.id);
+
+    // On notifie le parent (inchangé)
     onSelect?.(concept);
   };
 
@@ -75,7 +104,7 @@ export default function ConceptsAvailable({ concepts, onSelect, pageSize = 6 }: 
         </h3>
         <div className="flex items-center bg-gradient-to-r from-blue-50 to-purple-50 px-2 sm:px-3 py-1 rounded-full border border-blue-200">
           <span className="text-xs sm:text-sm text-blue-700 font-medium">
-            {selectedConcepts.size} sélectionné{selectedConcepts.size !== 1 ? 's' : ''}
+            {transientSelectedIds.size} sélectionné{transientSelectedIds.size !== 1 ? 's' : ''}
           </span>
         </div>
       </div>
@@ -83,7 +112,7 @@ export default function ConceptsAvailable({ concepts, onSelect, pageSize = 6 }: 
       {/* Grille des concepts */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 gap-2 sm:gap-3 mb-4">
         {pagedConcepts.map((concept) => {
-          const isSelected = selectedConcepts.has(concept.id);
+          const isSelectedTransient = transientSelectedIds.has(concept.id);
           const isFlashing = clickFlashIds.has(concept.id);
 
           return (
@@ -91,7 +120,7 @@ export default function ConceptsAvailable({ concepts, onSelect, pageSize = 6 }: 
               key={concept.id}
               onClick={() => handleSelect(concept)}
               className={`group relative p-3 sm:p-4 rounded-lg sm:rounded-xl border-2 text-left transition-all duration-300 transform hover:scale-105 hover:shadow-lg ${
-                isSelected
+                isSelectedTransient
                   ? 'border-blue-400 bg-gradient-to-br from-blue-50 to-purple-50 shadow-md'
                   : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gradient-to-br hover:from-gray-50 hover:to-blue-50'
               } ${isFlashing ? 'ring-2 ring-blue-400/60' : ''}`}
@@ -111,7 +140,9 @@ export default function ConceptsAvailable({ concepts, onSelect, pageSize = 6 }: 
                   <span className="font-bold text-gray-900 text-sm sm:text-base group-hover:text-blue-600 transition-colors">
                     {concept.mot}
                   </span>
-                  {isSelected && <span className="text-blue-500 text-lg animate-pulse">✓</span>}
+                  {isSelectedTransient && (
+                    <span className="text-blue-500 text-lg animate-pulse">✓</span>
+                  )}
                 </div>
 
                 <div className="text-xs sm:text-sm text-gray-600 mb-2 line-clamp-2 leading-relaxed">
@@ -135,12 +166,12 @@ export default function ConceptsAvailable({ concepts, onSelect, pageSize = 6 }: 
                 </div>
               </div>
 
-              {/* Effet de sélection (existant) */}
-              {isSelected && (
+              {/* Effet de sélection bref */}
+              {isSelectedTransient && (
                 <div className="absolute inset-0 bg-gradient-to-r from-blue-400/20 to-purple-400/20 rounded-lg sm:rounded-xl animate-pulse"></div>
               )}
 
-              {/* NEW: ping court au clic (même si on “désélectionne”) */}
+              {/* Ping court au clic (même si l'état transitoire est déjà terminé) */}
               {isFlashing && (
                 <span className="pointer-events-none absolute inset-0 rounded-lg sm:rounded-xl animate-ping opacity-40 bg-blue-300/20"></span>
               )}

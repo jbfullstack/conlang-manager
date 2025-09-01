@@ -10,7 +10,7 @@ export interface AuthenticatedUser {
   email: string;
   role: Role;
   username?: string;
-  premiumUntil?: Date;
+  premiumUntil?: Date | null;
 }
 
 export interface SecurityContext {
@@ -228,28 +228,6 @@ export async function requireResourceOwnership(
   return authResult;
 }
 
-// Wrapper pour gérer les erreurs de sécurité de façon uniforme
-export function withSecurity<T extends any[]>(
-  handler: (context: SecurityContext, ...args: T) => Promise<NextResponse>
-) {
-  return async (request: NextRequest, ...args: T): Promise<NextResponse> => {
-    try {
-      const authResult = await requireAuth(request);
-      
-      if (authResult instanceof NextResponse) {
-        return authResult;
-      }
-
-      return await handler(authResult, ...args);
-    } catch (error) {
-      console.error('Security error:', error);
-      return NextResponse.json({
-        error: 'Internal security error',
-        code: 'INTERNAL_ERROR'
-      }, { status: 500 });
-    }
-  };
-}
 
 // Wrapper spécialisé pour les routes avec permission ET limite d'usage
 export function withUsageLimit<T extends any[]>(
@@ -338,101 +316,6 @@ export function withAIPermission<T extends any[]>(
   };
 }
 
-// Helper pour vérifier une permission spécifique
-export async function requirePermission(
-  request: NextRequest, 
-  permission: Permission
-): Promise<SecurityContext | NextResponse> {
-  const authResult = await requireAuth(request);
-  
-  // Si c'est déjà une erreur, la retourner
-  if (authResult instanceof NextResponse) {
-    return authResult;
-  }
-
-  if (!authResult.hasPermission(permission)) {
-    return NextResponse.json({
-      error: `Permission required: ${permission}`,
-      code: 'FORBIDDEN',
-      requiredPermission: permission
-    }, { status: 403 });
-  }
-
-  return authResult;
-}
-
-// Helper pour vérifier plusieurs permissions (OU logique)
-export async function requireAnyPermission(
-  request: NextRequest, 
-  permissions: Permission[]
-): Promise<SecurityContext | NextResponse> {
-  const authResult = await requireAuth(request);
-  
-  if (authResult instanceof NextResponse) {
-    return authResult;
-  }
-
-  const hasAnyPermission = permissions.some(permission => 
-    authResult.hasPermission(permission)
-  );
-
-  if (!hasAnyPermission) {
-    return NextResponse.json({
-      error: `One of these permissions required: ${permissions.join(', ')}`,
-      code: 'FORBIDDEN',
-      requiredPermissions: permissions
-    }, { status: 403 });
-  }
-
-  return authResult;
-}
-
-// Helper pour vérifier un rôle spécifique
-export async function requireRole(
-  request: NextRequest, 
-  role: Role
-): Promise<SecurityContext | NextResponse> {
-  const authResult = await requireAuth(request);
-  
-  if (authResult instanceof NextResponse) {
-    return authResult;
-  }
-
-  if (authResult.user.role !== role) {
-    return NextResponse.json({
-      error: `Role required: ${role}`,
-      code: 'FORBIDDEN',
-      requiredRole: role,
-      userRole: authResult.user.role
-    }, { status: 403 });
-  }
-
-  return authResult;
-}
-
-// Helper pour vérifier la propriété d'une ressource
-export async function requireResourceOwnership(
-  request: NextRequest,
-  resourceOwnerId: string,
-  editOwnPermission: Permission,
-  editAllPermission: Permission
-): Promise<SecurityContext | NextResponse> {
-  const authResult = await requireAuth(request);
-  
-  if (authResult instanceof NextResponse) {
-    return authResult;
-  }
-
-  if (!authResult.canModifyResource(resourceOwnerId, editOwnPermission, editAllPermission)) {
-    return NextResponse.json({
-      error: 'You can only modify your own resources or need elevated permissions',
-      code: 'FORBIDDEN',
-      requiredPermissions: [editOwnPermission, editAllPermission]
-    }, { status: 403 });
-  }
-
-  return authResult;
-}
 
 // Helper pour limiter les taux d'appel selon le rôle
 export async function applyRoleBasedRateLimit(

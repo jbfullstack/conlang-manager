@@ -1,5 +1,6 @@
 // lib/auth.ts - Configuration minimale pour éviter les erreurs d'import
 import type { NextAuthOptions } from 'next-auth';
+import { Role } from './permissions';
 
 // Configuration minimale qui ne sera utilisée qu'en production
 export const authOptions: NextAuthOptions = {
@@ -10,17 +11,20 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.role = user.role;
-        token.permissions = user.permissions;
+        token.id = user.id as string;
+        token.email = user.email as string;
+        token.role = (user as any).role as Role;
+        token.username = (user as any).username ?? undefined;
+        token.premiumUntil = (user as any).premiumUntil ?? null;
       }
       return token;
     },
     async session({ session, token }) {
-      if (session.user) {
-        session.user.id = token.sub!;
-        session.user.role = token.role as string;
-        session.user.permissions = token.permissions as string[];
-      }
+      session.user.id = token.id as string;
+      session.user.email = token.email as string;
+      session.user.role = token.role as Role;
+      session.user.username = (token.username as string | undefined) ?? undefined;
+      session.user.premiumUntil = (token.premiumUntil as Date | null) ?? null;
       return session;
     },
   },

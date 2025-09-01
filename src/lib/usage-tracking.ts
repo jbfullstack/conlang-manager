@@ -200,7 +200,7 @@ export async function getTopUsers(limit: number = 10, orderBy: keyof DailyUsageD
   });
 
   // Calculer les totaux et trier
-  const usersWithTotals = users.map(user => {
+  const usersWithTotals = users.map((user: { dailyUsage: any[]; }) => {
     const totals = user.dailyUsage.reduce((acc, day) => ({
       compositionsCreated: acc.compositionsCreated + day.compositionsCreated,
       aiSearchRequests: acc.aiSearchRequests + day.aiSearchRequests,
@@ -221,7 +221,7 @@ export async function getTopUsers(limit: number = 10, orderBy: keyof DailyUsageD
     };
   });
 
-  return usersWithTotals.sort((a, b) => b.totals[orderBy] - a.totals[orderBy]);
+  return usersWithTotals.sort((a: { totals: { [x: string]: number; }; }, b: { totals: { [x: string]: number; }; }) => b.totals[orderBy] - a.totals[orderBy]);
 }
 
 // Nettoyer les anciennes données (à exécuter périodiquement)

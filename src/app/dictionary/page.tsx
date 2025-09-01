@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import clsx from 'clsx';
 import { fetch as signedFetch, updateComposition, deleteComposition } from '@/utils/api-client';
 import Pagination from '@/app/components/ui/Pagination'; // ⚠️ Remplacer par la version améliorée avec props `compact` et `variant`
+import StatusSelect from '../components/features/dictionnary/StatusSelect';
 
 type Scope = 'all' | 'concepts' | 'combinations';
 type Lang = 'all' | 'conlang' | 'fr';
@@ -371,23 +372,6 @@ function Segmented({
         ))}
       </div>
     </div>
-  );
-}
-
-function StatusSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const options = ['', 'draft', 'in_progress', 'done'];
-  return (
-    <select
-      className="w-full rounded-xl border border-gray-200 bg-white/80 backdrop-blur-sm px-3 py-2 text-xs sm:text-sm
-                 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all"
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-    >
-      <option value="">🏷️ Tous les statuts</option>
-      <option value="draft">📝 Brouillon</option>
-      <option value="in_progress">🚧 En cours</option>
-      <option value="done">✅ Terminé</option>
-    </select>
   );
 }
 

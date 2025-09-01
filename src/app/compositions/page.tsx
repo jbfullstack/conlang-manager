@@ -59,10 +59,14 @@ export default function CompositionPage() {
   // --- Onglets
   const [mode, setMode] = useState<'manual' | 'ai-search' | 'ai-analyze'>('manual');
 
+  const nbConceptMaxForOneSingleComposition = 12;
+
   // --- Pattern (ordre & répétitions)
   const [selectedConcepts, setSelectedConcepts] = useState<Concept[]>([]);
   const addConceptToPattern = (c: Concept) =>
-    setSelectedConcepts((prev) => (prev.length >= 6 ? prev : [...prev, c]));
+    setSelectedConcepts((prev) =>
+      prev.length >= nbConceptMaxForOneSingleComposition ? prev : [...prev, c],
+    );
   const moveLeft = (i: number) =>
     setSelectedConcepts((prev) => {
       if (i <= 0) return prev;
