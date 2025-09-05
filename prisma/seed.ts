@@ -157,14 +157,14 @@ async function main() {
 
     // mouvement/énergie
     prisma.property.create({
-      data: { spaceId: global.id, name: 'vitesse', description: 'Rapide', category: 'DYNAMIQUE' },
+      data: { spaceId: global.id, name: 'vitesse', description: 'Rapide', category: 'Dynamique' },
     }),
     prisma.property.create({
       data: {
         spaceId: global.id,
         name: 'dynamique',
         description: 'Mouvement, action',
-        category: 'DYNAMIQUE',
+        category: 'Dynamique',
       },
     }),
     prisma.property.create({
@@ -172,7 +172,7 @@ async function main() {
         spaceId: global.id,
         name: 'energie',
         description: 'Puissance, énergie',
-        category: 'DYNAMIQUE',
+        category: 'Dynamique',
       },
     }),
 
