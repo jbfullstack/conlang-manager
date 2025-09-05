@@ -2,9 +2,11 @@ import axios from 'axios';
 import CryptoJS from 'crypto-js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const ULID_RE = /^[0-9A-HJKMNP-TV-Z]{26}$/; // ULID base32 RFC, 26 chars
+const CUID_LIKE_RE = /^c[a-z0-9]{8,}$/i; // assez robuste pour Prisma cuid/cuid2
 
-function isUUID(v?: string | null): v is string {
-  return !!v && UUID_RE.test(v);
+function isValidId(v?: string | null): v is string {
+  return !!v && (UUID_RE.test(v) || ULID_RE.test(v) || CUID_LIKE_RE.test(v));
 }
 
 function getSpaceIdFromStorageOrCookie(): string | null {
@@ -19,16 +21,19 @@ function getSpaceIdFromStorageOrCookie(): string | null {
     const m = document.cookie.match(/(?:^|;\s*)x-space-id=([^;]+)/);
     if (m) sid = decodeURIComponent(m[1]);
   }
-  return sid && isUUID(sid) ? sid : null; // renvoie null si slug / invalide
+  return sid && isValidId(sid) ? sid : null; // renvoie null si slug / invalide
 }
+
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_BASE_URL || '',
   withCredentials: true,
+  // ⬅️ Ne jette plus sur 4xx/5xx : on gère comme fetch()
+  validateStatus: () => true,
 });
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
 
-/** --- Utilitaires localStorage pour l'espace courant --- */
+/** --- Utilitaires localStorage pour l'espace courant (optionnels ailleurs) --- */
 const LS_SPACE_ID = 'space.currentId';
 const LS_SPACE_NAME = 'space.currentName';
 
@@ -46,7 +51,7 @@ function writeSpace(id: string, name?: string) {
   } catch {}
 }
 
-// ---------- HMAC identique ----------
+// ---------- HMAC ----------
 function signRequest(method: string, url: string, body: any, timestamp: string) {
   const secret = process.env.NEXT_PUBLIC_APP_SECRET_KEY || '';
   const pathWithSearch = url.startsWith('/') ? url : `/${url}`;
@@ -60,30 +65,37 @@ function signRequest(method: string, url: string, body: any, timestamp: string) 
 
 // ---------- Helper : attacher spaceId aux endpoints qui le requièrent ----------
 export function attachSpaceIdIfNeeded(url: string): string {
-  // On garde ta logique "est-ce que ce endpoint a besoin d'un spaceId ?"
-  const needs = (pathname: string) => {
-    // Exemple : adapte selon ta logique existante
-    return [
+  const needs = (pathname: string) =>
+    [
       '/api/compositions',
       '/api/concepts',
       '/api/properties',
       '/api/properties/categories',
+      '/api/dictionary',
+      '/api/dictionary/search',
     ].some((p) => pathname.startsWith(p));
-  };
 
   const base =
     typeof window === 'undefined'
-      ? 'http://localhost' // base neutre pour URL sur SSR
+      ? 'http://localhost' // base neutre pour URL.parse côté SSR
       : window.location.origin;
 
-  const u = new URL(url, base);
-  if (!needs(u.pathname)) return url;
+  try {
+    const u = new URL(url, base);
+    if (!needs(u.pathname)) {
+      return url; // laisse tel quel (et garde forme relative si c'était relatif)
+    }
+    const sid = getSpaceIdFromStorageOrCookie();
+    if (!sid) return url; // n'injecte rien si pas un UUID valide
 
-  const sid = getSpaceIdFromStorageOrCookie();
-  if (!sid) return url; // <-- ne rien injecter si pas un UUID
+    // idempotent
+    u.searchParams.set('spaceId', sid);
 
-  u.searchParams.set('spaceId', sid);
-  return u.pathname + (u.search ? u.search : '');
+    // Retourne chemin relatif + query (compatible baseURL + signature)
+    return u.pathname + (u.search ? u.search : '');
+  } catch {
+    return url;
+  }
 }
 
 // ---------- Intercepteur : signature + headers + x-space-id ----------
@@ -91,13 +103,20 @@ api.interceptors.request.use((config) => {
   const timestamp = Date.now().toString();
   const method = (config.method || 'GET').toUpperCase();
 
+  // S'assurer d'avoir un headers mutable
+  (config.headers as any) = (config.headers as any) || {};
+
   let url = config.url || '/';
+
+  // Recompose l'URL avec params éventuels AVANT injection du spaceId
   if (config.params) {
     const qs = new URLSearchParams(config.params as any).toString();
     if (qs) url += (url.includes('?') ? '&' : '?') + qs;
+    // ⬅️ IMPORTANT : on nettoie pour éviter que Axios les ré-ajoute
+    (config as any).params = undefined;
   }
 
-  // NEW: on attache spaceId dans l'URL si nécessaire (cohérent avec la signature)
+  // Attache spaceId dans l'URL si nécessaire (cohérent avec la signature)
   url = attachSpaceIdIfNeeded(url);
   config.url = url;
 
@@ -105,47 +124,47 @@ api.interceptors.request.use((config) => {
   const signature = signRequest(method, url, body, timestamp);
 
   if (method !== 'GET' && method !== 'HEAD') {
-    config.headers['Content-Type'] = config.headers['Content-Type'] || 'application/json';
+    (config.headers as any)['Content-Type'] =
+      (config.headers as any)['Content-Type'] || 'application/json';
   }
-  config.headers['x-app-timestamp'] = timestamp;
-  config.headers['x-app-signature'] = signature;
-  config.headers['x-app-key'] = process.env.NEXT_PUBLIC_APP_PUBLIC_KEY || '';
+  (config.headers as any)['x-app-timestamp'] = timestamp;
+  (config.headers as any)['x-app-signature'] = signature;
+  (config.headers as any)['x-app-key'] = process.env.NEXT_PUBLIC_APP_PUBLIC_KEY || '';
 
-  // --- Fallbacks robustes pour x-space-id
-  try {
-    // si déjà posé plus haut, on ne touche pas
-    const hasHeader = !!(config.headers as any)['x-space-id'];
-
-    // 1) autre clé LS possible
-    if (!hasHeader && typeof window !== 'undefined') {
-      const alt = localStorage.getItem('current.spaceId');
-      if (alt) (config.headers as any)['x-space-id'] = alt;
+  // --- x-space-id uniquement si UUID valide (sinon on s'abstient)
+  const hasHeader = !!(config.headers as any)['x-space-id'];
+  if (!hasHeader) {
+    const sid = getSpaceIdFromStorageOrCookie();
+    if (sid) {
+      (config.headers as any)['x-space-id'] = sid;
     }
-
-    // 2) cookie si toujours rien
-    if (!(config.headers as any)['x-space-id'] && typeof document !== 'undefined') {
-      const m = document.cookie.match(/(?:^|;\s*)x-space-id=([^;]+)/);
-      if (m) (config.headers as any)['x-space-id'] = decodeURIComponent(m[1]);
-    }
-  } catch {
-    /* no-op */
   }
 
   return config;
 });
 
 // ==== léger wrapper fetch basé sur axios ====
-
+// -> même ergonomie que window.fetch (ne jette pas, expose ok/status, etc.)
 export const fetch = async (url: string, method: HttpMethod = 'GET', body?: any) => {
-  const finalUrl = attachSpaceIdIfNeeded(url); // NEW: fallback côté client
+  // Idempotent: l'intercepteur le fera aussi, mais on le fait ici au cas où
+  const finalUrl = attachSpaceIdIfNeeded(url);
+
+  // Axios ne jette pas grâce à validateStatus:true -> comportement fetch-like
   const res = await api.request({ method, url: finalUrl, data: body });
+
   return {
     ok: res.status >= 200 && res.status < 300,
     status: res.status,
     statusText: res.statusText,
     headers: { get: (name: string) => (res.headers as any)[name.toLowerCase()] },
     json: async () => res.data,
-    text: async () => JSON.stringify(res.data),
+    text: async () => {
+      try {
+        return typeof res.data === 'string' ? res.data : JSON.stringify(res.data);
+      } catch {
+        return String(res.data);
+      }
+    },
   };
 };
 
@@ -185,7 +204,7 @@ export const fetchPostAnalyzeComposition = async (payload: any) =>
 export const fetchDictionary = (qs: string) =>
   fetch(`/api/dictionary/search${qs.startsWith('?') ? qs : `?${qs}`}`);
 
-// Compositions CRUD (déjà là, mais pour mémoire)
+// Compositions CRUD
 export const updateComposition = (id: string, payload: any) =>
   fetch(`/api/compositions/${id}`, 'PUT', payload);
 export const deleteComposition = (id: string) => fetch(`/api/compositions/${id}`, 'DELETE');
@@ -193,11 +212,15 @@ export const deleteComposition = (id: string) => fetch(`/api/compositions/${id}`
 export const patchSpaceMember = (id: string, body: any) =>
   fetch(`/api/spaces/${id}/members?spaceId=${id}`, 'PATCH', body);
 
-// fetcher signé (pratique pour SWR)
+// fetcher signé (pour SWR)
 export const signedFetcher = async (url: string) => {
-  const res = await fetch(url); // <=== ton wrapper ci-dessus
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-  return res.json(); // retourne déjà les données
+  const res = await fetch(url); // wrapper ci-dessus
+  if (!res.ok) {
+    // Fournit un message utile côté UI (au lieu d'un throw Axios brut)
+    const msg = await res.text();
+    throw new Error(`${res.status} ${res.statusText}${msg ? ` — ${msg}` : ''}`);
+  }
+  return res.json();
 };
 
 export default api;

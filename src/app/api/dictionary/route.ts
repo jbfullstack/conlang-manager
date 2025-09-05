@@ -1,18 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { resolveSpaceIdOrDefault, requireSpaceMembership } from '@/lib/space-security';
+import { requireAuthDev } from '@/lib/api-security-dev';
 
 export async function GET(request: NextRequest) {
   try {
+    await requireAuthDev(request);
     const url = new URL(request.url);
-    const spaceId = request.headers.get('x-space-id') || url.searchParams.get('spaceId') || '';
-    if (!spaceId) return NextResponse.json({ error: 'SPACE_REQUIRED' }, { status: 400 });
+
+    const spaceId = await resolveSpaceIdOrDefault(request, prisma);
+    await requireSpaceMembership(request, prisma, { minRole: 'MEMBER', explicitSpaceId: spaceId });
+
     const q = url.searchParams.get('q') ?? '';
     const conceptPage = Math.max(1, Number(url.searchParams.get('conceptPage') ?? '1'));
     const conceptPageSize = Math.max(1, Number(url.searchParams.get('conceptPageSize') ?? '6'));
     const comboPage = Math.max(1, Number(url.searchParams.get('comboPage') ?? '1'));
     const comboPageSize = Math.max(1, Number(url.searchParams.get('comboPageSize') ?? '6'));
 
-    // Concepts
+    // Concepts (scopés)
     let conceptWhere: any = { spaceId, isActive: true };
     if (q) {
       const term = q.toLowerCase();
@@ -35,43 +40,29 @@ export async function GET(request: NextRequest) {
       take: conceptPageSize,
       include: {
         user: { select: { username: true } },
-        conceptProperties: {
-          include: { property: { select: { name: true } } },
-        },
+        conceptProperties: { include: { property: { select: { name: true } } } },
       },
     });
 
-    const conceptItems = concepts.map((c) => ({
-      id: c.id,
-      type: 'concept',
-      label: c.mot,
-      description: c.definition,
-      // facultatif: propriétés
-    })) as any[];
-
-    // Combinaisons
-    const combTotal = await prisma.combination.count({
-      where: { spaceId, statut: { not: 'REFUSE' } },
-    });
-
+    // Combinations (scopées)
+    const combWhere: any = { spaceId, statut: { not: 'REFUSE' } };
+    const combTotal = await prisma.combination.count({ where: combWhere });
     const combinations = await prisma.combination.findMany({
-      where: { spaceId, statut: { not: 'REFUSE' } },
+      where: combWhere,
       orderBy: { createdAt: 'desc' },
       skip: (comboPage - 1) * comboPageSize,
       take: comboPageSize,
     });
 
-    const combItems = combinations.map((cb) => ({
-      id: cb.id,
-      type: 'combination',
-      label: cb.sens || '',
-      description: cb.description,
-      pattern: cb.pattern ? JSON.parse(cb.pattern) : [],
-    })) as any[];
-
-    const totalCount = conceptsTotal + combTotal;
-    const totalPagesConcepts = Math.ceil(conceptsTotal / conceptPageSize) || 1;
-    const totalPagesComb = Math.ceil(combTotal / comboPageSize) || 1; // attention syntax
+    return NextResponse.json({
+      concepts,
+      combinations,
+      counts: { concepts: conceptsTotal, combinations: combTotal },
+      pages: {
+        concepts: Math.max(1, Math.ceil(conceptsTotal / conceptPageSize)),
+        combinations: Math.max(1, Math.ceil(combTotal / comboPageSize)),
+      },
+    });
   } catch (error) {
     console.error('Dictionary API error:', error);
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });

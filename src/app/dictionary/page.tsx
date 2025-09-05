@@ -5,6 +5,7 @@ import clsx from 'clsx';
 import { fetch as signedFetch, updateComposition, deleteComposition } from '@/utils/api-client';
 import Pagination from '@/app/components/ui/Pagination'; // ⚠️ Remplacer par la version améliorée avec props `compact` et `variant`
 import StatusSelect from '@/app/components/features/dictionnary/StatusSelect';
+import { useSpace } from '@/app/components/providers/SpaceProvider';
 
 type Scope = 'all' | 'concepts' | 'combinations';
 type Lang = 'all' | 'conlang' | 'fr';
@@ -29,6 +30,10 @@ type Combination = {
 };
 
 export default function DictionaryPage() {
+  // Espace courant
+  const { current } = useSpace();
+  const spaceId = current?.id || null;
+
   const [q, setQ] = useState('');
   const [scope, setScope] = useState<Scope>('all');
   const [lang, setLang] = useState<Lang>('all');
@@ -52,21 +57,22 @@ export default function DictionaryPage() {
     return () => clearTimeout(t);
   }, [q]);
 
-  // URL signée pour concepts
+  // URL signée pour concepts (scopée espace)
   const conceptsQueryUrl = useMemo(() => {
-    if (scope === 'combinations') return null;
+    if (!spaceId || scope === 'combinations') return null;
     const qs = new URLSearchParams();
     qs.set('q', debouncedQ);
     qs.set('scope', 'concepts');
     qs.set('lang', lang);
     qs.set('page', String(conceptsPage));
     qs.set('pageSize', String(conceptsPageSize));
+    qs.set('spaceId', spaceId); // 👈 important
     return `/api/dictionary/search?${qs.toString()}`;
-  }, [debouncedQ, lang, conceptsPage, conceptsPageSize, scope]);
+  }, [debouncedQ, lang, conceptsPage, conceptsPageSize, scope, spaceId]);
 
-  // URL signée pour combinations
+  // URL signée pour combinations (scopée espace)
   const combinationsQueryUrl = useMemo(() => {
-    if (scope === 'concepts') return null;
+    if (!spaceId || scope === 'concepts') return null;
     const qs = new URLSearchParams();
     qs.set('q', debouncedQ);
     qs.set('scope', 'combinations');
@@ -74,11 +80,12 @@ export default function DictionaryPage() {
     if (status) qs.set('status', status);
     qs.set('page', String(combinationsPage));
     qs.set('pageSize', String(combinationsPageSize));
+    qs.set('spaceId', spaceId); // 👈 important
     return `/api/dictionary/search?${qs.toString()}`;
-  }, [debouncedQ, lang, status, combinationsPage, combinationsPageSize, scope]);
+  }, [debouncedQ, lang, status, combinationsPage, combinationsPageSize, scope, spaceId]);
 
   const fetchConcepts = useCallback(async () => {
-    if (!conceptsQueryUrl) return;
+    if (!conceptsQueryUrl || !spaceId) return;
     try {
       const res = await signedFetch(conceptsQueryUrl, 'GET');
       if (!res.ok) throw new Error(await res.text());
@@ -88,11 +95,12 @@ export default function DictionaryPage() {
     } catch (e) {
       console.error('concepts fetch error', e);
       setConcepts([]);
+      setCounts((prev) => ({ ...prev, concepts: 0 }));
     }
-  }, [conceptsQueryUrl]);
+  }, [conceptsQueryUrl, spaceId]);
 
   const fetchCombinations = useCallback(async () => {
-    if (!combinationsQueryUrl) return;
+    if (!combinationsQueryUrl || !spaceId) return;
     try {
       const res = await signedFetch(combinationsQueryUrl, 'GET');
       if (!res.ok) throw new Error(await res.text());
@@ -102,23 +110,32 @@ export default function DictionaryPage() {
     } catch (e) {
       console.error('combinations fetch error', e);
       setCombinations([]);
+      setCounts((prev) => ({ ...prev, combinations: 0 }));
     }
-  }, [combinationsQueryUrl]);
+  }, [combinationsQueryUrl, spaceId]);
 
   const fetchData = useCallback(async () => {
+    if (!spaceId) return;
     setLoading(true);
     try {
       await Promise.all([fetchConcepts(), fetchCombinations()]);
     } finally {
       setLoading(false);
     }
-  }, [fetchConcepts, fetchCombinations]);
+  }, [fetchConcepts, fetchCombinations, spaceId]);
 
-  // Reset pagination when filters change
+  // Reset pagination quand filtres OU espace changent
   useEffect(() => {
     setConceptsPage(1);
     setCombinationsPage(1);
-  }, [debouncedQ, scope, lang, status]);
+  }, [debouncedQ, scope, lang, status, spaceId]);
+
+  // Vider l'état quand l'espace change (évite d'afficher l'ancien contenu)
+  useEffect(() => {
+    setConcepts([]);
+    setCombinations([]);
+    setCounts({ concepts: 0, combinations: 0 });
+  }, [spaceId]);
 
   useEffect(() => {
     fetchData();
@@ -170,8 +187,27 @@ export default function DictionaryPage() {
   const conceptsTotalPages = Math.ceil(counts.concepts / conceptsPageSize);
   const combinationsTotalPages = Math.ceil(counts.combinations / combinationsPageSize);
 
+  // État si aucun espace sélectionné
+  if (!spaceId) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50">
+        <div className="max-w-7xl mx-auto p-4 sm:p-6">
+          <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/20 p-6 text-center">
+            <div className="text-4xl mb-3">🗂️</div>
+            <div className="text-gray-700 font-medium">
+              Sélectionnez un espace pour consulter le dictionnaire.
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50">
+    <div
+      key={spaceId}
+      className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50"
+    >
       <div className="max-w-7xl mx-auto p-3 sm:p-6 space-y-4 sm:space-y-6">
         {/* ====== HEADER ====== */}
         <div className="bg-white/80 backdrop-blur-sm rounded-xl sm:rounded-2xl shadow-xl border border-white/20 p-4 sm:p-6">

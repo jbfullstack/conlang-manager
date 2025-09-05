@@ -1,5 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requireAuthDev } from '@/lib/api-security-dev';
+
+// ---- ID helpers: accepte UUID / ULID / CUID (Prisma) ----
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const ULID_RE = /^[0-9A-HJKMNP-TV-Z]{26}$/;
+const CUID_LIKE_RE = /^c[a-z0-9]{8,}$/i;
+const isLikelyId = (v?: string | null): v is string =>
+  !!v && (UUID_RE.test(v) || ULID_RE.test(v) || CUID_LIKE_RE.test(v));
+
+// ---- Type guard pour requireAuthDev ----
+function hasUser(x: any): x is {
+  user: { id: string; email: string; role: any; username: string };
+  hasPermission: (p: any) => boolean;
+  canModifyResource: (ownerId: string, editOwn: any, editAll: any) => boolean;
+} {
+  return x && typeof x === 'object' && x.user && typeof x.user.id === 'string';
+}
 
 function str(v: string | null): string {
   return (v || '').trim();
@@ -10,7 +27,6 @@ function normalizePattern(v: any): string[] {
   try {
     if (!v) return [];
     if (Array.isArray(v)) return v.map(String);
-
     if (typeof v === 'string') {
       const s = v.trim();
       if (!s) return [];
@@ -20,7 +36,6 @@ function normalizePattern(v: any): string[] {
         .map((t) => t.trim())
         .filter(Boolean);
     }
-
     if (typeof v === 'object') {
       // @ts-ignore
       if (Array.isArray(v?.values)) return v.values.map(String);
@@ -32,147 +47,175 @@ function normalizePattern(v: any): string[] {
   }
 }
 
+// ---- Helpers robustes: tente avec spaceId; si le schéma n'a pas la colonne, fallback sans ----
+async function countConceptsScoped(whereScoped: any) {
+  try {
+    return await prisma.concept.count({ where: whereScoped });
+  } catch {
+    const { spaceId, ...withoutSpace } = whereScoped || {};
+    return await prisma.concept.count({ where: withoutSpace });
+  }
+}
+async function listConceptsScoped(whereScoped: any, page: number, pageSize: number) {
+  try {
+    return await prisma.concept.findMany({
+      where: whereScoped,
+      orderBy: [{ mot: 'asc' }],
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      select: { id: true, mot: true, definition: true, type: true, isActive: true },
+    });
+  } catch {
+    const { spaceId, ...withoutSpace } = whereScoped || {};
+    return await prisma.concept.findMany({
+      where: withoutSpace,
+      orderBy: [{ mot: 'asc' }],
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      select: { id: true, mot: true, definition: true, type: true, isActive: true },
+    });
+  }
+}
+async function countCombsScoped(whereScoped: any) {
+  try {
+    return await prisma.combination.count({ where: whereScoped });
+  } catch {
+    const { spaceId, ...withoutSpace } = whereScoped || {};
+    return await prisma.combination.count({ where: withoutSpace });
+  }
+}
+async function listCombsScoped(whereScoped: any, page: number, pageSize: number) {
+  try {
+    return await prisma.combination.findMany({
+      where: whereScoped,
+      orderBy: [{ updatedAt: 'desc' }],
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      select: {
+        id: true,
+        sens: true,
+        description: true,
+        statut: true,
+        pattern: true, // si la colonne n'existe pas, on retombe dans le catch
+        updatedAt: true,
+        source: true,
+      },
+    });
+  } catch {
+    const { spaceId, ...withoutSpace } = whereScoped || {};
+    // Fallback sans 'pattern' si la colonne n'existe pas
+    return await prisma.combination.findMany({
+      where: withoutSpace,
+      orderBy: [{ updatedAt: 'desc' }],
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      select: {
+        id: true,
+        sens: true,
+        description: true,
+        statut: true,
+        updatedAt: true,
+        source: true,
+      },
+    });
+  }
+}
+
 export async function GET(req: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url);
+    // 1) Auth (dev). Si requireAuthDev renvoie une NextResponse (401/redirect), retourne-la.
+    const auth = await requireAuthDev(req);
+    if (!hasUser(auth)) return auth as NextResponse;
+    const { user } = auth;
 
-    const q = str(searchParams.get('q'));
-    const scopeRaw = (searchParams.get('scope') || 'all').toLowerCase();
+    // 2) Résolution spaceId
+    const url = new URL(req.url);
+    const rawSid = req.headers.get('x-space-id') || url.searchParams.get('spaceId') || '';
+    let spaceId: string | null = isLikelyId(rawSid) ? rawSid : null;
+
+    // Fallback: 1er espace actif du user (depuis la DB) — NE PAS re-valider ici
+    if (!spaceId) {
+      const m = await prisma.spaceMember.findFirst({
+        where: { userId: user.id, isActive: true },
+        select: { spaceId: true },
+        orderBy: { createdAt: 'asc' },
+      });
+      if (m?.spaceId) spaceId = m.spaceId; // on fait confiance à la DB
+    }
+    if (!spaceId) {
+      return NextResponse.json({ error: 'SPACE_REQUIRED' }, { status: 400 });
+    }
+
+    // 3) Vérif appartenance : si le user n’est pas membre de cet espace → 403
+    const isMember = await prisma.spaceMember.findFirst({
+      where: { userId: user.id, spaceId, isActive: true },
+      select: { id: true },
+    });
+    if (!isMember) {
+      return NextResponse.json({ error: 'FORBIDDEN_SPACE' }, { status: 403 });
+    }
+
+    // 4) Params
+    const q = str(url.searchParams.get('q'));
+    const rawScope = (url.searchParams.get('scope') || 'all').toLowerCase();
     const scope: 'all' | 'concepts' | 'combinations' =
-      scopeRaw === 'compositions'
+      rawScope === 'compositions'
         ? 'combinations'
-        : scopeRaw === 'combinations'
+        : rawScope === 'combinations'
         ? 'combinations'
-        : scopeRaw === 'concepts'
+        : rawScope === 'concepts'
         ? 'concepts'
         : 'all';
 
-    const lang = (searchParams.get('lang') || 'all') as 'all' | 'conlang' | 'fr';
-    const status = str(searchParams.get('status'));
-    const page = Math.max(1, Number(searchParams.get('page') || '1'));
-    const pageSize = Math.min(100, Math.max(1, Number(searchParams.get('pageSize') || '20')));
-
-    // Flags schéma (sécurisés)
-    const USE_PATTERN_WORDS = process.env.USE_PATTERN_WORDS === 'true'; // combination.patternWords: string[]
-    const USE_PATTERN_TEXT = process.env.USE_PATTERN_TEXT === 'true'; // combination.pattern: string LIKE
-    const COMBO_TITLE_FIELD = (process.env.COMBINATION_TITLE_FIELD || '').trim(); // ex: headword | title
-
-    const like = (s: string) => ({ contains: s, mode: 'insensitive' as const });
+    const lang = (url.searchParams.get('lang') || 'all') as 'all' | 'conlang' | 'fr';
+    const status = str(url.searchParams.get('status'));
+    const page = Math.max(1, Number(url.searchParams.get('page') || '1'));
+    const pageSize = Math.min(100, Math.max(1, Number(url.searchParams.get('pageSize') || '20')));
 
     const wantConcepts = scope === 'all' || scope === 'concepts';
     const wantCombinations = scope === 'all' || scope === 'combinations';
+    const like = (s: string) => ({ contains: s, mode: 'insensitive' as const });
 
-    // -------------------- CONCEPTS --------------------
-    // FR -> (definition, type) ; Conlang -> (mot)
-    // Conlang doit aussi retourner "go" quand on tape "eau" => OR (mot) ∪ (definition/type)
-    const whereConcepts: any = { isActive: true };
+    // 5) WHEREs scopés (avec `spaceId`) — helpers gèreront le fallback si colonne absente
+    const whereConcepts: any = { isActive: true, spaceId };
     if (q) {
       if (lang === 'fr') {
         whereConcepts.OR = [{ definition: like(q) }, { type: like(q) }];
       } else if (lang === 'conlang') {
         whereConcepts.OR = [{ mot: like(q) }, { definition: like(q) }, { type: like(q) }];
       } else {
-        // all = union FR ∪ Conlang
         whereConcepts.OR = [{ mot: like(q) }, { definition: like(q) }, { type: like(q) }];
       }
     }
 
-    // -------------------- BRIDGE FR -> Conlang (pour combinations) --------------------
-    // Si on est en lang=conlang (ou all), on peut dériver les "mots conlang" pertinents à partir des concepts FR.
-    let bridgeConlangWords: string[] = [];
-    if (q && wantCombinations && (lang === 'conlang' || lang === 'all') && USE_PATTERN_WORDS) {
-      const frConcepts = await prisma.concept.findMany({
-        where: {
-          OR: [{ definition: like(q) }, { type: like(q) }],
-          isActive: true,
-        },
-        select: { mot: true },
-        take: 50,
-      });
-      bridgeConlangWords = frConcepts.map((c) => c.mot).filter(Boolean);
-    }
-
-    // -------------------- COMBINATIONS --------------------
-    // FR = sens, description
-    const frCombPreds = (qq: string) => [{ sens: like(qq) }, { description: like(qq) }];
-
-    // Conlang = titre conlang (optionnel) + tokens conlang (patternWords) + fallback pattern LIKE (optionnel)
-    const clCombPreds = (qq: string) => {
-      const arr: any[] = [];
-      if (COMBO_TITLE_FIELD) {
-        const dyn: any = {};
-        dyn[COMBO_TITLE_FIELD] = like(qq);
-        arr.push(dyn);
-      }
-      if (USE_PATTERN_WORDS) {
-        // recherche directe du token saisi (si l'user tape déjà un token conlang)
-        arr.push({ patternWords: { has: qq } });
-        // + bridge FR -> Conlang (si 'qq' est un mot FR, on ajoute les mots conlang dérivés)
-        if (bridgeConlangWords.length) {
-          arr.push({ patternWords: { hasSome: bridgeConlangWords } });
-        }
-      } else if (USE_PATTERN_TEXT) {
-        // @ts-ignore si pattern est string
-        arr.push({ pattern: like(qq) });
-      }
-      return arr;
-    };
-
-    const whereCombs: any = {};
+    const whereCombs: any = { spaceId };
     if (q) {
+      const orFR = [{ sens: like(q) }, { description: like(q) }];
+      // Pas de champs exotiques (patternWords, titre dynamique). On reste sur sens/description.
       const or =
         lang === 'fr'
-          ? frCombPreds(q)
+          ? orFR
           : lang === 'conlang'
-          ? clCombPreds(q)
-          : [...frCombPreds(q), ...clCombPreds(q)]; // all = union
+          ? orFR /* + { pattern: like(q) } si tu veux activer la recherche sur 'pattern' */
+          : orFR;
       if (or.length) whereCombs.OR = or;
     }
     if (status) whereCombs.statut = status;
 
-    // -------------------- COUNT --------------------
+    // 6) Counts + Data (avec fallback auto si colonne spaceId inexistante)
     const [conceptsCount, combinationsCount] = await Promise.all([
-      wantConcepts ? prisma.concept.count({ where: whereConcepts }) : Promise.resolve(0),
-      wantCombinations ? prisma.combination.count({ where: whereCombs }) : Promise.resolve(0),
+      wantConcepts ? countConceptsScoped(whereConcepts) : Promise.resolve(0),
+      wantCombinations ? countCombsScoped(whereCombs) : Promise.resolve(0),
     ]);
 
-    // -------------------- DATA --------------------
-    const [concepts, combinationsRaw] = await Promise.all([
-      wantConcepts
-        ? prisma.concept.findMany({
-            where: whereConcepts,
-            orderBy: [{ mot: 'asc' }],
-            skip: (page - 1) * pageSize,
-            take: pageSize,
-            select: { id: true, mot: true, definition: true, type: true, isActive: true },
-          })
-        : Promise.resolve([] as any[]),
-
-      wantCombinations
-        ? prisma.combination.findMany({
-            where: whereCombs,
-            orderBy: [{ updatedAt: 'desc' }],
-            skip: (page - 1) * pageSize,
-            take: pageSize,
-            select: {
-              id: true,
-              sens: true,
-              description: true,
-              statut: true,
-              pattern: true, // JSON | string | ...
-              // patternWords: true,  // n'activer que si le champ existe dans ton schéma
-              ...(COMBO_TITLE_FIELD ? ({ [COMBO_TITLE_FIELD]: true } as any) : {}),
-              updatedAt: true,
-              source: true,
-            },
-          })
-        : Promise.resolve([] as any[]),
+    const [concepts, combsRaw] = await Promise.all([
+      wantConcepts ? listConceptsScoped(whereConcepts, page, pageSize) : Promise.resolve([]),
+      wantCombinations ? listCombsScoped(whereCombs, page, pageSize) : Promise.resolve([]),
     ]);
 
-    // Normalise pattern -> string[]
-    const combinations = (combinationsRaw as any[]).map((c) => ({
+    const combinations = (combsRaw as any[]).map((c) => ({
       ...c,
-      pattern: normalizePattern(c.pattern),
+      pattern: normalizePattern((c as any).pattern),
     }));
 
     return NextResponse.json({
@@ -183,6 +226,7 @@ export async function GET(req: NextRequest) {
       combinations,
     });
   } catch (e: any) {
+    console.error('[dictionary/search] error:', e?.message, e?.stack);
     return NextResponse.json({ error: e?.message || 'search failed' }, { status: 500 });
   }
 }
