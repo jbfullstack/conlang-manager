@@ -1,15 +1,16 @@
-import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
+// src/app/layout.tsx
 import './globals.css';
+import { Inter } from 'next/font/google';
+import { SessionProvider } from '@/app/components/providers/SessionProvider';
+import { SpaceProvider } from '@/app/components/providers/SpaceProvider';
+import ResponsiveNav from '@/app/components/ui/ResponsiveNav';
 import { DevBanner } from '@/dev/dev-banner';
-import { SessionProvider } from './components/providers/SessionProvider';
-import ResponsiveNav from '@/app/components/ui/ResponsiveNav'; // Import du composant client séparé
 
 const inter = Inter({ subsets: ['latin'] });
 
-export const metadata: Metadata = {
+export const metadata = {
   title: 'Conlang Manager',
-  description: 'Gestionnaire collaboratif de langue construite',
+  description: 'Personnal language manager',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -17,16 +18,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="fr">
       <body className={inter.className}>
         <SessionProvider>
-          <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50">
-            {/* Banner de développement */}
-            <DevBanner />
-
-            {/* Navigation responsive */}
-            <ResponsiveNav />
-
-            {/* Contenu principal */}
-            <main className="relative">{children}</main>
-          </div>
+          {/* NEW: on englobe l’app dans le provider d’espace */}
+          <SpaceProvider>
+            <div className="min-h-screen bg-gray-50 text-gray-900">
+              <DevBanner />
+              <ResponsiveNav />
+              <main className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+                {children}
+              </main>
+            </div>
+          </SpaceProvider>
         </SessionProvider>
       </body>
     </html>

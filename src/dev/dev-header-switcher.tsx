@@ -67,6 +67,14 @@ export default function DevHeaderSwitcher() {
         localStorage.setItem('dev.username', data.username);
         localStorage.setItem('dev.userId', data.id);
         localStorage.setItem('dev.role', data.role);
+        document.cookie = `x-dev-username=${encodeURIComponent(
+          data.username,
+        )}; Path=/; SameSite=Lax`;
+        // (optionnel) si tu veux aussi un id
+        if (data.id) {
+          document.cookie = `x-dev-user-id=${encodeURIComponent(data.id)}; Path=/; SameSite=Lax`;
+        }
+        // window.location.reload();
       } catch (e: any) {
         if (!cancelled) {
           setResolved(null);

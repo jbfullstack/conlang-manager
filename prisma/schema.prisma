@@ -16,41 +16,43 @@ model User {
   isActive     Boolean  @default(true) @map("is_active")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
-  
+
   // Nouvelles propriétés pour les limites
   premiumUntil DateTime? @map("premium_until") // Date d'expiration du premium
-  
+
   // Relations
   conceptsCreated     Concept[]
   combinationsCreated Combination[]
-  votes              CombinationVote[]
-  sessionsCreated    UserSession[]
-  auditLogs          AuditLog[]
-  suggestionsReviewed LLMSuggestion[] @relation("ReviewedBy")
-  statusChanges      CombinationStatusHistory[]
-  dailyUsage         DailyUsage[] // Nouvelle relation pour tracker l'usage
-  aiRequests         AIRequest[]  // Nouvelle relation pour l'historique des appels IA
+  votes               CombinationVote[]
+  sessionsCreated     UserSession[]
+  auditLogs           AuditLog[]
+  suggestionsReviewed LLMSuggestion[]            @relation("ReviewedBy")
+  statusChanges       CombinationStatusHistory[]
+  dailyUsage          DailyUsage[] // Nouvelle relation pour tracker l'usage
+  aiRequests          AIRequest[] // Nouvelle relation pour l'historique des appels IA
+  Space               Space[]
+  SpaceMember         SpaceMember[]
 
   @@map("users")
 }
 
 // Nouvelle table pour tracker l'usage quotidien
 model DailyUsage {
-  id               String   @id @default(cuid())
-  userId           String   @map("user_id")
-  date             DateTime @map("date") @db.Date
-  
+  id     String   @id @default(cuid())
+  userId String   @map("user_id")
+  date   DateTime @map("date") @db.Date
+
   // Compteurs pour les différentes fonctionnalités
-  compositionsCreated    Int @default(0) @map("compositions_created")
-  aiSearchRequests       Int @default(0) @map("ai_search_requests")
-  aiAnalyzeRequests      Int @default(0) @map("ai_analyze_requests")
-  conceptsCreated        Int @default(0) @map("concepts_created")
-  
+  compositionsCreated Int @default(0) @map("compositions_created")
+  aiSearchRequests    Int @default(0) @map("ai_search_requests")
+  aiAnalyzeRequests   Int @default(0) @map("ai_analyze_requests")
+  conceptsCreated     Int @default(0) @map("concepts_created")
+
   // Coûts estimés (optionnel, pour le monitoring)
-  estimatedCostUsd       Float? @default(0) @map("estimated_cost_usd")
-  
-  createdAt        DateTime @default(now()) @map("created_at")
-  updatedAt        DateTime @updatedAt @map("updated_at")
+  estimatedCostUsd Float? @default(0) @map("estimated_cost_usd")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -61,25 +63,25 @@ model DailyUsage {
 
 // Nouvelle table pour l'historique des appels IA (pour analytics et debugging)
 model AIRequest {
-  id              String   @id @default(cuid())
-  userId          String   @map("user_id")
-  requestType     AIRequestType @map("request_type")
-  
+  id          String        @id @default(cuid())
+  userId      String        @map("user_id")
+  requestType AIRequestType @map("request_type")
+
   // Données de la requête
-  inputData       String   @map("input_data") // JSON string
-  outputData      String?  @map("output_data") // JSON string
-  
+  inputData  String  @map("input_data") // JSON string
+  outputData String? @map("output_data") // JSON string
+
   // Métriques
-  tokensUsed      Int?     @map("tokens_used")
-  costUsd         Float?   @map("cost_usd")
-  responseTime    Int?     @map("response_time") // en millisecondes
-  modelUsed       String?  @map("model_used")
-  
+  tokensUsed   Int?    @map("tokens_used")
+  costUsd      Float?  @map("cost_usd")
+  responseTime Int?    @map("response_time") // en millisecondes
+  modelUsed    String? @map("model_used")
+
   // Statut de la requête
-  status          AIRequestStatus @default(SUCCESS)
-  errorMessage    String?  @map("error_message")
-  
-  createdAt       DateTime @default(now()) @map("created_at")
+  status       AIRequestStatus @default(SUCCESS)
+  errorMessage String?         @map("error_message")
+
+  createdAt DateTime @default(now()) @map("created_at")
 
   // Relations
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -88,59 +90,67 @@ model AIRequest {
 }
 
 model Concept {
-  id              String   @id
-  mot             String   @unique
-  definition      String
-  type            String
+  id                String            @id
+  mot               String            @unique
+  definition        String
+  type              String
   conceptProperties ConceptProperty[]
-  etymologie      String?
-  exemples        String   // JSON string
-  usageFrequency  Float    @default(0.00) @map("usage_frequency")
-  isActive        Boolean  @default(true) @map("is_active")
-  createdBy       String?  @map("created_by")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
-  version         Int      @default(1)
+  etymologie        String?
+  exemples          String // JSON string
+  usageFrequency    Float             @default(0.00) @map("usage_frequency")
+  isActive          Boolean           @default(true) @map("is_active")
+  createdBy         String?           @map("created_by")
+  createdAt         DateTime          @default(now()) @map("created_at")
+  updatedAt         DateTime          @updatedAt @map("updated_at")
+  version           Int               @default(1)
+
+  spaceId String
+  space   Space  @relation(fields: [spaceId], references: [id], onDelete: Cascade)
 
   // Relations
   user User? @relation(fields: [createdBy], references: [id], onDelete: SetNull)
 
+  @@index([spaceId, mot])
   @@map("concepts")
 }
 
 model Property {
   id          String   @id @default(cuid())
   name        String   @unique // Ex: "liquide", "rapide", "lumineux"
-  description String?  // Description optionnelle
-  category    String?  // Ex: "physique", "abstrait", "sensoriel"
+  description String? // Description optionnelle
+  category    String? // Ex: "physique", "abstrait", "sensoriel"
   usageCount  Int      @default(0) // Combien de concepts l'utilisent
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
-  
+
+  spaceId String
+  space   Space  @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+
   // Relations
   conceptProperties ConceptProperty[]
-  
+
+  @@index([spaceId, name])
   @@map("properties")
 }
 
 // Table de liaison Many-to-Many
 model ConceptProperty {
-  id        String   @id @default(cuid())
-  conceptId String   @map("concept_id")
-  propertyId String  @map("property_id")
-  createdAt DateTime @default(now())
-  
+  id         String   @id @default(cuid())
+  conceptId  String   @map("concept_id")
+  propertyId String   @map("property_id")
+  createdAt  DateTime @default(now())
+
   // Relations
   concept  Concept  @relation(fields: [conceptId], references: [id], onDelete: Cascade)
   property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  
+
   @@unique([conceptId, propertyId])
   @@map("concept_properties")
 }
 
 model Combination {
   id              String            @id @default(cuid())
-  pattern         String            // JSON string of concept IDs (ordre sensible)
+  pattern         String // JSON string of concept IDs (ordre sensible)
   patternHash     String            @unique @map("pattern_hash") // hash ordre-sensible
   sens            String
   description     String?
@@ -154,11 +164,15 @@ model Combination {
   updatedAt       DateTime          @updatedAt @map("updated_at")
   version         Int               @default(1)
 
-  // Relations
-  user            User? @relation(fields: [createdBy], references: [id], onDelete: SetNull)
-  votes           CombinationVote[]
-  statusHistory   CombinationStatusHistory[]
+  spaceId String
+  space   Space  @relation(fields: [spaceId], references: [id], onDelete: Cascade)
 
+  // Relations
+  user          User?                      @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+  votes         CombinationVote[]
+  statusHistory CombinationStatusHistory[]
+
+  @@index([spaceId, patternHash])
   @@map("combinations")
 }
 
@@ -180,13 +194,13 @@ model CombinationVote {
 }
 
 model CombinationStatusHistory {
-  id             String            @id @default(cuid())
-  combinationId  String            @map("combination_id")
-  ancienStatut   CombinationStatus? @map("ancien_statut")
-  nouveauStatut  CombinationStatus  @map("nouveau_statut")
-  changedBy      String?           @map("changed_by")
-  raison         String?
-  createdAt      DateTime          @default(now()) @map("created_at")
+  id            String             @id @default(cuid())
+  combinationId String             @map("combination_id")
+  ancienStatut  CombinationStatus? @map("ancien_statut")
+  nouveauStatut CombinationStatus  @map("nouveau_statut")
+  changedBy     String?            @map("changed_by")
+  raison        String?
+  createdAt     DateTime           @default(now()) @map("created_at")
 
   // Relations
   combination Combination @relation(fields: [combinationId], references: [id], onDelete: Cascade)
@@ -200,7 +214,7 @@ model LLMCache {
   cacheKey        String   @unique @map("cache_key")
   queryType       String   @map("query_type")
   inputData       String   @map("input_data") // JSON string
-  result          String   // JSON string
+  result          String // JSON string
   confidenceScore Float?   @map("confidence_score")
   modelUsed       String   @default("gpt-4o-mini") @map("model_used")
   tokensUsed      Int?     @map("tokens_used")
@@ -211,15 +225,15 @@ model LLMCache {
 }
 
 model LLMSuggestion {
-  id              String             @id @default(cuid())
+  id              String           @id @default(cuid())
   type            String
-  suggestion      String             // JSON string
-  context         String?            // JSON string  
-  confidenceScore Float?             @map("confidence_score")
-  statut          SuggestionStatus   @default(PENDING)
-  createdAt       DateTime           @default(now()) @map("created_at")
-  reviewedBy      String?            @map("reviewed_by")
-  reviewedAt      DateTime?          @map("reviewed_at")
+  suggestion      String // JSON string
+  context         String? // JSON string  
+  confidenceScore Float?           @map("confidence_score")
+  statut          SuggestionStatus @default(PENDING)
+  createdAt       DateTime         @default(now()) @map("created_at")
+  reviewedBy      String?          @map("reviewed_by")
+  reviewedAt      DateTime?        @map("reviewed_at")
 
   // Relations
   reviewer User? @relation("ReviewedBy", fields: [reviewedBy], references: [id], onDelete: SetNull)
@@ -228,16 +242,16 @@ model LLMSuggestion {
 }
 
 model AuditLog {
-  id         String      @id @default(cuid())
-  tableName  String      @map("table_name")
-  recordId   String      @map("record_id")
-  operation  Operation
-  oldData    String?     @map("old_data") // JSON string
-  newData    String?     @map("new_data") // JSON string
-  changedBy  String?     @map("changed_by")
-  createdAt  DateTime    @default(now()) @map("created_at")
-  ipAddress  String?     @map("ip_address")
-  userAgent  String?     @map("user_agent")
+  id        String    @id @default(cuid())
+  tableName String    @map("table_name")
+  recordId  String    @map("record_id")
+  operation Operation
+  oldData   String?   @map("old_data") // JSON string
+  newData   String?   @map("new_data") // JSON string
+  changedBy String?   @map("changed_by")
+  createdAt DateTime  @default(now()) @map("created_at")
+  ipAddress String?   @map("ip_address")
+  userAgent String?   @map("user_agent")
 
   // Relations
   user User? @relation(fields: [changedBy], references: [id], onDelete: SetNull)
@@ -261,13 +275,54 @@ model UserSession {
   @@map("user_sessions")
 }
 
+model Space {
+  id          String      @id @default(cuid())
+  name        String
+  slug        String      @unique
+  description String?
+  status      SpaceStatus @default(PENDING)
+
+  createdBy String
+  creator   User   @relation(fields: [createdBy], references: [id])
+
+  members SpaceMember[]
+
+  // ancrages contenus
+  concepts     Concept[]
+  properties   Property[]
+  combinations Combination[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([name])
+}
+
+model SpaceMember {
+  id        String    @id @default(cuid())
+  spaceId   String
+  userId    String
+  role      SpaceRole @default(MEMBER)
+  isActive  Boolean   @default(true)
+  invitedBy String?
+
+  space Space @relation(fields: [spaceId], references: [id])
+  user  User  @relation(fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([spaceId, userId])
+}
+
 // ==================== ENUMS ====================
 
 enum UserRole {
-  USER        // Utilisateur de base (ex-MEMBER)
-  PREMIUM     // Utilisateur premium avec accès IA
-  MODERATOR   // Modérateur
-  ADMIN       // Administrateur
+  USER // Utilisateur de base (ex-MEMBER)
+  PREMIUM // Utilisateur premium avec accès IA
+  MODERATOR // Modérateur
+  MADROLE // Modérateur madeleine <3
+  ADMIN // Administrateur
 }
 
 enum CombinationStatus {
@@ -304,10 +359,10 @@ enum Operation {
 }
 
 enum AIRequestType {
-  AI_SEARCH       // Recherche IA reverse
-  AI_ANALYZE      // Analyse de composition
-  AI_SUGGESTION   // Suggestions automatiques
-  AI_TRANSLATION  // Traduction (pour le futur)
+  AI_SEARCH // Recherche IA reverse
+  AI_ANALYZE // Analyse de composition
+  AI_SUGGESTION // Suggestions automatiques
+  AI_TRANSLATION // Traduction (pour le futur)
 }
 
 enum AIRequestStatus {
@@ -315,4 +370,18 @@ enum AIRequestStatus {
   ERROR
   RATE_LIMITED
   INSUFFICIENT_CREDITS
+}
+
+enum SpaceStatus {
+  PENDING
+  ACTIVE
+  REJECTED
+  ARCHIVED
+}
+
+enum SpaceRole {
+  OWNER
+  MODERATOR
+  MADROLE
+  MEMBER
 }

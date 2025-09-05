@@ -1,3 +1,4 @@
+// src/app/concepts/page.tsx
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
@@ -7,7 +8,6 @@ import ConceptSearchAndFilter from '@/app/components/features/concepts/ConceptSe
 import Pagination from '@/app/components/ui/Pagination';
 import { usePagination } from '@/hooks/usePagination';
 
-// Composants réutilisables
 import PageLayout from '@/app/components/ui/PageLayout';
 import PageHeader from '@/app/components/ui/PageHeader';
 import ContentSection from '@/app/components/ui/ContentSection';
@@ -20,6 +20,7 @@ import {
 } from '@/app/components/ui/LoadingStates';
 import { fetchConceptsTypes } from '@/utils/api-client';
 import { fetch as signedFetch } from '@/utils/api-client';
+import { useSpace } from '@/app/components/providers/SpaceProvider';
 
 interface Concept {
   id: string;
@@ -45,16 +46,14 @@ interface PaginationInfo {
 }
 
 export default function ConceptsPage() {
+  const { current } = useSpace();
   const [concepts, setConcepts] = useState<Concept[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingConcept, setEditingConcept] = useState<Concept | null>(null);
 
-  const pagination = usePagination({
-    defaultPageSize: 12,
-    defaultPage: 1,
-  });
+  const pagination = usePagination({ defaultPageSize: 12, defaultPage: 1 });
 
   const [searchFilters, setSearchFilters] = useState({
     searchTerm: '',
@@ -72,15 +71,22 @@ export default function ConceptsPage() {
 
   const [availableTypes, setAvailableTypes] = useState<string[]>([]);
 
-  // API calls
   const fetchConcepts = useCallback(async () => {
+    // IMPORTANT : ne pas spinner à l’infini si aucun espace
+    if (!current?.id) {
+      setLoading(false);
+      setConcepts([]);
+      setServerPagination((p) => ({ ...p, totalCount: 0, totalPages: 0 }));
+      return;
+    }
     try {
       setLoading(true);
       setError('');
 
       const params = new URLSearchParams({
-        page: pagination.currentPage.toString(),
-        pageSize: pagination.pageSize.toString(),
+        page: String(pagination.currentPage),
+        pageSize: String(pagination.pageSize),
+        spaceId: current.id,
       });
 
       if (searchFilters.searchTerm.trim()) {
@@ -114,7 +120,12 @@ export default function ConceptsPage() {
     } finally {
       setLoading(false);
     }
-  }, [searchFilters, pagination.currentPage, pagination.pageSize]);
+  }, [
+    current?.id, // <-- DEP AJOUTÉE (évite une fermeture obsolète)
+    searchFilters,
+    pagination.currentPage,
+    pagination.pageSize,
+  ]);
 
   const fetchTypes = useCallback(async () => {
     try {
@@ -130,17 +141,15 @@ export default function ConceptsPage() {
 
   useEffect(() => {
     fetchTypes();
-  }, []);
+  }, [fetchTypes]);
 
   useEffect(() => {
     fetchConcepts();
   }, [fetchConcepts]);
 
-  // Handlers
   const handleSearch = useCallback(
     (searchTerm: string, typeFilter: string) => {
-      const newFilters = { searchTerm, typeFilter };
-      setSearchFilters(newFilters);
+      setSearchFilters({ searchTerm, typeFilter });
       pagination.resetPagination();
     },
     [pagination],
@@ -171,17 +180,11 @@ export default function ConceptsPage() {
   };
 
   const handleDeleteConcept = async (id: string) => {
-    if (!confirm('Êtes-vous sûr de vouloir supprimer ce concept ?')) {
-      return;
-    }
+    if (!confirm('Êtes-vous sûr de vouloir supprimer ce concept ?')) return;
 
     try {
       const response = await signedFetch(`/api/concepts/${id}`, 'DELETE');
-
-      if (!response.ok) {
-        throw new Error('Erreur lors de la suppression');
-      }
-
+      if (!response.ok) throw new Error('Erreur lors de la suppression');
       await fetchConcepts();
     } catch (err) {
       alert(
@@ -195,7 +198,6 @@ export default function ConceptsPage() {
     try {
       const url = editingConcept ? `/api/concepts/${editingConcept.id}` : '/api/concepts';
       const method = editingConcept ? 'PUT' : 'POST';
-
       const response = await signedFetch(url, method, conceptData);
 
       if (!response.ok) {
@@ -216,7 +218,33 @@ export default function ConceptsPage() {
     setEditingConcept(null);
   };
 
-  // Loading state
+  // Aucun espace sélectionné => message clair (pas de spinner infini)
+  if (!current?.id && !loading) {
+    return (
+      <PageLayout variant="blue">
+        <PageHeader
+          title="Concepts Primitifs"
+          icon="🧠"
+          titleGradient="from-blue-600 via-purple-600 to-pink-600"
+          stats={[]}
+        />
+        <ContentSection>
+          <EmptyState
+            icon="🌌"
+            title="Aucun espace sélectionné"
+            description="Sélectionnez ou créez un slang‑space pour commencer à gérer vos concepts."
+            actionButton={{
+              label: 'Créer / choisir un espace',
+              onClick: () => (location.href = '/spaces'),
+              gradient:
+                'bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600',
+            }}
+          />
+        </ContentSection>
+      </PageLayout>
+    );
+  }
+
   if (loading && concepts.length === 0) {
     return (
       <LoadingScreen
@@ -227,12 +255,10 @@ export default function ConceptsPage() {
     );
   }
 
-  // Error state
   if (error && concepts.length === 0) {
     return <ErrorState message={error} onRetry={fetchConcepts} variant="red" />;
   }
 
-  // Préparer les stats pour le header
   const headerStats = [
     {
       icon: '📊',
@@ -250,7 +276,6 @@ export default function ConceptsPage() {
 
   return (
     <PageLayout variant="blue">
-      {/* Header */}
       <PageHeader
         title="Concepts Primitifs"
         icon="🧠"
@@ -266,7 +291,6 @@ export default function ConceptsPage() {
         }}
       />
 
-      {/* Search and Filter */}
       <ContentSection>
         <ConceptSearchAndFilter
           onSearch={handleSearch}
@@ -277,9 +301,7 @@ export default function ConceptsPage() {
         />
       </ContentSection>
 
-      {/* Main Content */}
       <ContentContainer loading={loading && concepts.length > 0} loadingMessage="Actualisation...">
-        {/* Empty state */}
         {concepts.length === 0 && !loading ? (
           <EmptyState
             icon={serverPagination.totalCount === 0 ? '📝' : '🔍'}
@@ -300,7 +322,6 @@ export default function ConceptsPage() {
           />
         ) : (
           <>
-            {/* Concepts Grid */}
             <div className="mb-6 sm:mb-8">
               <AnimatedGrid columns={4} gap="md">
                 {concepts.map((concept) => (
@@ -314,7 +335,6 @@ export default function ConceptsPage() {
               </AnimatedGrid>
             </div>
 
-            {/* Pagination */}
             {serverPagination.totalPages > 1 && (
               <ContentSection>
                 <Pagination
@@ -332,7 +352,6 @@ export default function ConceptsPage() {
         )}
       </ContentContainer>
 
-      {/* Form Modal */}
       {isFormOpen && (
         <ConceptForm
           concept={editingConcept}
@@ -342,7 +361,4 @@ export default function ConceptsPage() {
       )}
     </PageLayout>
   );
-}
-function awaitfetchConceptsTypes() {
-  throw new Error('Function not implemented.');
 }

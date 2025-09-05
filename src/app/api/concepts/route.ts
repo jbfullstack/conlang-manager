@@ -4,11 +4,13 @@ import { prisma } from '@/lib/prisma';
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    
+    const spaceId = request.headers.get('x-space-id') || searchParams.get('spaceId') || '';
+    if (!spaceId) return NextResponse.json({ error: 'SPACE_REQUIRED' }, { status: 400 });
+
     // Paramètres de recherche et filtrage
     const search = searchParams.get('search');
     const type = searchParams.get('type');
-    
+
     // Paramètres de pagination
     const page = Math.max(1, parseInt(searchParams.get('page') || '1'));
     const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get('pageSize') || '12')));
@@ -16,22 +18,23 @@ export async function GET(request: NextRequest) {
     // Mode de compatibilité - si pas de paramètres de pagination, comportement existant
     if (!searchParams.has('page') && !searchParams.has('pageSize')) {
       // Comportement legacy pour les appels existants
-      let where: any = { isActive: true };
+      // let where: any = { isActive: true };
+      let where: any = { spaceId, isActive: true };
 
       if (search) {
         const term = search.toLowerCase();
         where.OR = [
           { mot: { contains: term, mode: 'insensitive' } },
           { definition: { contains: term, mode: 'insensitive' } },
-          { 
+          {
             conceptProperties: {
               some: {
                 property: {
-                  name: { contains: term, mode: 'insensitive' }
-                }
-              }
-            }
-          }
+                  name: { contains: term, mode: 'insensitive' },
+                },
+              },
+            },
+          },
         ];
       }
 
@@ -41,36 +44,33 @@ export async function GET(request: NextRequest) {
 
       const concepts = await prisma.concept.findMany({
         where,
-        orderBy: [
-          { usageFrequency: 'desc' },
-          { mot: 'asc' }
-        ],
+        orderBy: [{ usageFrequency: 'desc' }, { mot: 'asc' }],
         include: {
           user: {
-            select: { username: true }
+            select: { username: true },
           },
           conceptProperties: {
             include: {
               property: {
-                select: { name: true }
-              }
-            }
-          }
-        }
+                select: { name: true },
+              },
+            },
+          },
+        },
       });
 
       // Transformer pour compatibilité avec l'ancien format
-      const conceptsWithProperties = concepts.map(concept => ({
+      const conceptsWithProperties = concepts.map((concept) => ({
         ...concept,
-        proprietes: concept.conceptProperties.map(cp => cp.property.name),
-        exemples: concept.exemples ? JSON.parse(concept.exemples) : []
+        proprietes: concept.conceptProperties.map((cp) => cp.property.name),
+        exemples: concept.exemples ? JSON.parse(concept.exemples) : [],
       }));
 
       return NextResponse.json({ concepts: conceptsWithProperties });
     }
 
     // Nouveau mode paginé avec filtrage global
-    let where: any = {};
+    let where: any = { spaceId };
 
     // Par défaut, on n'affiche que les actifs
     if (typeof where.isActive === 'undefined') {
@@ -89,11 +89,11 @@ export async function GET(request: NextRequest) {
           conceptProperties: {
             some: {
               property: {
-                name: { contains: term, mode: 'insensitive' }
-              }
-            }
-          }
-        }
+                name: { contains: term, mode: 'insensitive' },
+              },
+            },
+          },
+        },
       ];
     }
 
@@ -115,29 +115,29 @@ export async function GET(request: NextRequest) {
       orderBy: [
         { isActive: 'desc' }, // Concepts actifs en premier
         { usageFrequency: 'desc' }, // Puis par fréquence d'usage
-        { mot: 'asc' } // Puis par ordre alphabétique
+        { mot: 'asc' }, // Puis par ordre alphabétique
       ],
       skip,
       take: pageSize,
       include: {
         user: {
-          select: { username: true }
+          select: { username: true },
         },
         conceptProperties: {
           include: {
             property: {
-              select: { name: true }
-            }
-          }
-        }
-      }
+              select: { name: true },
+            },
+          },
+        },
+      },
     });
 
     // Transformer pour compatibilité avec l'ancien format
-    const conceptsWithProperties = concepts.map(concept => ({
+    const conceptsWithProperties = concepts.map((concept) => ({
       ...concept,
-      proprietes: concept.conceptProperties.map(cp => cp.property.name),
-      exemples: concept.exemples ? JSON.parse(concept.exemples) : []
+      proprietes: concept.conceptProperties.map((cp) => cp.property.name),
+      exemples: concept.exemples ? JSON.parse(concept.exemples) : [],
     }));
 
     // Informations de pagination
@@ -149,20 +149,19 @@ export async function GET(request: NextRequest) {
       hasNext: page < totalPages,
       hasPrev: page > 1,
       startItem: totalCount > 0 ? skip + 1 : 0,
-      endItem: Math.min(skip + pageSize, totalCount)
+      endItem: Math.min(skip + pageSize, totalCount),
     };
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       concepts: conceptsWithProperties,
       pagination,
       totalCount, // Pour compatibilité
     });
-    
   } catch (error) {
     console.error('Erreur GET concepts:', error);
     return NextResponse.json(
       { error: 'Erreur serveur lors de la récupération des concepts' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -170,150 +169,108 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const {
-      mot,
-      definition,
-      type,
-      proprietes = [],
-      etymologie,
-      exemples = [],
-    } = body;
+    const { mot, definition, type, proprietes = [], etymologie, exemples = [] } = body;
 
     // Validation
     if (!mot || !definition || !type) {
       return NextResponse.json(
         { error: 'Les champs mot, définition et type sont obligatoires' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     if (mot.length < 2 || mot.length > 100) {
       return NextResponse.json(
         { error: 'Le mot doit contenir entre 2 et 100 caractères' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     if (definition.length < 2 || definition.length > 500) {
       return NextResponse.json(
-        { error: 'La définition doit contenir entre 10 et 500 caractères' },
-        { status: 400 }
+        { error: 'La définition doit contenir entre 2 et 500 caractères' },
+        { status: 400 },
       );
     }
 
-    // Vérifier l'unicité du mot
-    const existingConcept = await prisma.concept.findFirst({
-      where: {
-        mot: {
-          equals: mot.trim(),
-          mode: 'insensitive'
-        }
-      }
+    const spaceId =
+      request.headers.get('x-space-id') || new URL(request.url).searchParams.get('spaceId') || '';
+    if (!spaceId) return NextResponse.json({ error: 'SPACE_REQUIRED' }, { status: 400 });
+    // unicité par mot DANS l’espace
+    const exists = await prisma.concept.findFirst({
+      where: { spaceId, mot: { equals: mot.trim(), mode: 'insensitive' } },
     });
-
-    if (existingConcept) {
-      return NextResponse.json(
-        { error: 'Un concept avec ce mot existe déjà' },
-        { status: 409 }
-      );
-    }
+    if (exists) return NextResponse.json({ error: 'CONCEPT_EXISTS' }, { status: 409 });
 
     // Créer le concept d'abord
     const newConcept = await prisma.concept.create({
       data: {
+        spaceId,
         id: mot.trim(),
         mot: mot.trim(),
         definition: definition.trim(),
         type: type.trim(),
         etymologie: etymologie?.trim(),
-        exemples: JSON.stringify(Array.isArray(exemples) ? exemples.filter(e => e?.trim()) : []),
-        usageFrequency: 0,
-        isActive: true
-      }
+        exemples: JSON.stringify(
+          Array.isArray(exemples) ? exemples.filter((e: string) => e?.trim()) : [],
+        ),
+        isActive: true,
+      },
     });
 
-    // Traiter les propriétés avec création automatique et liaison
-    const propertyIds: string[] = [];
-    
-    for (const propertyName of proprietes) {
-      if (!propertyName?.trim()) continue;
-      
-      const normalizedName = propertyName.trim().toLowerCase();
-      
-      // Vérifier si la propriété existe
-      let property = await prisma.property.findFirst({
-        where: {
-          name: {
-            equals: normalizedName,
-            mode: 'insensitive'
-          }
-        }
-      });
+    // propriétés (création auto dans l’espace)
+    for (const propName of proprietes) {
+      const normalized = String(propName || '')
+        .trim()
+        .toLowerCase();
+      if (!normalized) continue;
 
-      // Créer la propriété si elle n'existe pas
+      let property = await prisma.property.findFirst({
+        where: { spaceId, name: { equals: normalized, mode: 'insensitive' } },
+      });
       if (!property) {
         property = await prisma.property.create({
           data: {
-            name: normalizedName,
-            description: `Propriété générée automatiquement pour "${normalizedName}"`,
+            spaceId,
+            name: normalized,
+            description: `Propriété auto: ${normalized}`,
             category: 'custom',
             usageCount: 0,
-            isActive: true
-          }
+            isActive: true,
+          },
+        });
+      } else {
+        await prisma.property.update({
+          where: { id: property.id },
+          data: { usageCount: { increment: 1 } },
         });
       }
 
-      // Incrémenter le compteur d'usage
-      await prisma.property.update({
-        where: { id: property.id },
-        data: { usageCount: { increment: 1 } }
-      });
-
-      // Créer la relation concept-property
       await prisma.conceptProperty.create({
-        data: {
-          conceptId: newConcept.id,
-          propertyId: property.id
-        }
+        data: { conceptId: newConcept.id, propertyId: property.id },
       });
-
-      propertyIds.push(property.id);
     }
 
-    // Récupérer le concept avec ses relations pour la réponse
-    const conceptWithRelations = await prisma.concept.findUnique({
+    const conceptWithProps = await prisma.concept.findUnique({
       where: { id: newConcept.id },
-      include: {
-        user: {
-          select: { username: true }
-        },
-        conceptProperties: {
-          include: {
-            property: {
-              select: { name: true }
-            }
-          }
-        }
-      }
+      include: { conceptProperties: { include: { property: { select: { name: true } } } } },
     });
 
-    // Transformer pour compatibilité
-    const conceptResponse = {
-      ...conceptWithRelations,
-      proprietes: conceptWithRelations?.conceptProperties.map(cp => cp.property.name) || [],
-      exemples: conceptWithRelations?.exemples ? JSON.parse(conceptWithRelations.exemples) : []
-    };
-
-    return NextResponse.json({
-      message: 'Concept créé avec succès',
-      concept: conceptResponse
-    }, { status: 201 });
-
-  } catch (error) {
-    console.error('Erreur POST concept:', error);
+    return NextResponse.json(
+      {
+        message: 'Concept créé avec succès',
+        concept: {
+          ...conceptWithProps,
+          proprietes: conceptWithProps?.conceptProperties.map((cp) => cp.property.name) || [],
+          exemples: conceptWithProps?.exemples ? JSON.parse(conceptWithProps.exemples) : [],
+        },
+      },
+      { status: 201 },
+    );
+  } catch (e) {
     return NextResponse.json(
       { error: 'Erreur serveur lors de la création du concept' },
-      { status: 500 }
+      { status: 500 },
     );
   } finally {
     await prisma.$disconnect();

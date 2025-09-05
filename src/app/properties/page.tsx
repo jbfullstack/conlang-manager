@@ -1,26 +1,27 @@
+// src/app/properties/page.tsx
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import PropertyCard from '../components/features/properties/PropertyCard';
-import PropertyForm from '../components/features/properties/PropertyForm';
-import PropertySearchAndFilter from '../components/features/properties/PropertySearchAndFilter';
-import Pagination from '../components/ui/Pagination';
+import PropertyCard from '@/app/components/features/properties/PropertyCard';
+import PropertyForm from '@/app/components/features/properties/PropertyForm';
+import PropertySearchAndFilter from '@/app/components/features/properties/PropertySearchAndFilter';
+import Pagination from '@/app/components/ui/Pagination';
 import { Property } from '@/interfaces/property.interface';
 import { usePagination } from '@/hooks/usePagination';
 
-// Composants réutilisables
-import PageLayout from '../components/ui/PageLayout';
-import PageHeader from '../components/ui/PageHeader';
-import ContentSection from '../components/ui/ContentSection';
-import AnimatedGrid from '../components/ui/AnimatedGrid';
+import ContentSection from '@/app/components/ui/ContentSection';
+import AnimatedGrid from '@/app/components/ui/AnimatedGrid';
 import {
   LoadingScreen,
   ErrorState,
   EmptyState,
   ContentContainer,
-} from '../components/ui/LoadingStates';
-import { fetchPropertiesCategories } from '@/utils/api-client';
-import { fetch as signedFetch } from '@/utils/api-client';
+} from '@/app/components/ui/LoadingStates';
+import { fetchPropertiesCategories, fetch as signedFetch } from '@/utils/api-client';
+
+import PageLayout from '@/app/components/ui/PageLayout';
+import PageHeader from '@/app/components/ui/PageHeader';
+import { useSpace } from '@/app/components/providers/SpaceProvider';
 
 interface PaginationInfo {
   page: number;
@@ -32,16 +33,14 @@ interface PaginationInfo {
 }
 
 export default function PropertiesPage() {
+  const { current } = useSpace();
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingProperty, setEditingProperty] = useState<Property | null>(null);
 
-  const pagination = usePagination({
-    defaultPageSize: 12,
-    defaultPage: 1,
-  });
+  const pagination = usePagination({ defaultPageSize: 12, defaultPage: 1 });
 
   const [searchFilters, setSearchFilters] = useState({
     searchTerm: '',
@@ -60,35 +59,36 @@ export default function PropertiesPage() {
 
   const [availableCategories, setAvailableCategories] = useState<string[]>([]);
 
-  // API calls
   const fetchProperties = useCallback(async () => {
+    // Stopper le spinner si aucun espace sélectionné
+    if (!current?.id) {
+      setLoading(false);
+      setProperties([]);
+      setServerPagination((p) => ({ ...p, totalCount: 0, totalPages: 0 }));
+      return;
+    }
+
     try {
       setLoading(true);
       setError('');
 
       const params = new URLSearchParams({
-        page: pagination.currentPage.toString(),
-        pageSize: pagination.pageSize.toString(),
+        page: String(pagination.currentPage),
+        pageSize: String(pagination.pageSize),
         include: 'concepts',
         active: 'false',
+        spaceId: current.id,
       });
 
-      if (searchFilters.searchTerm.trim()) {
-        params.set('search', searchFilters.searchTerm.trim());
-      }
-      if (searchFilters.categoryFilter !== 'all') {
+      if (searchFilters.searchTerm.trim()) params.set('search', searchFilters.searchTerm.trim());
+      if (searchFilters.categoryFilter !== 'all')
         params.set('category', searchFilters.categoryFilter);
-      }
-      if (searchFilters.activeFilter !== 'all') {
-        params.set('status', searchFilters.activeFilter);
-      }
+      if (searchFilters.activeFilter !== 'all') params.set('status', searchFilters.activeFilter);
 
-      const url = `/api/properties?${params.toString()}`;
-      const response = await signedFetch(url);
+      // IMPORTANT : utiliser signedFetch (Response-like)
+      const response = await signedFetch(`/api/properties?${params.toString()}`);
 
-      if (!response.ok) {
-        throw new Error('Erreur lors du chargement des propriétés');
-      }
+      if (!response.ok) throw new Error('Erreur lors du chargement des propriétés');
 
       const data = await response.json();
       setProperties(data.properties || []);
@@ -107,7 +107,12 @@ export default function PropertiesPage() {
     } finally {
       setLoading(false);
     }
-  }, [searchFilters, pagination.currentPage, pagination.pageSize]);
+  }, [
+    current?.id, // <-- DEP AJOUTÉE (évite fermeture obsolète)
+    searchFilters,
+    pagination.currentPage,
+    pagination.pageSize,
+  ]);
 
   const fetchCategories = useCallback(async () => {
     try {
@@ -123,17 +128,15 @@ export default function PropertiesPage() {
 
   useEffect(() => {
     fetchCategories();
-  }, []);
+  }, [fetchCategories]);
 
   useEffect(() => {
     fetchProperties();
   }, [fetchProperties]);
 
-  // Handlers
   const handleSearch = useCallback(
     (searchTerm: string, categoryFilter: string, activeFilter: string) => {
-      const newFilters = { searchTerm, categoryFilter, activeFilter };
-      setSearchFilters(newFilters);
+      setSearchFilters({ searchTerm, categoryFilter, activeFilter });
       pagination.resetPagination();
     },
     [pagination],
@@ -164,18 +167,14 @@ export default function PropertiesPage() {
   };
 
   const handleDeleteProperty = async (id: string) => {
-    if (!confirm('Êtes-vous sûr de vouloir supprimer cette propriété ?')) {
-      return;
-    }
+    if (!confirm('Êtes-vous sûr de vouloir supprimer cette propriété ?')) return;
 
     try {
       const response = await signedFetch(`/api/properties/${id}`, 'DELETE');
-
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || 'Erreur lors de la suppression');
       }
-
       await fetchProperties();
     } catch (err) {
       alert(
@@ -189,7 +188,6 @@ export default function PropertiesPage() {
     try {
       const url = editingProperty ? `/api/properties/${editingProperty.id}` : '/api/properties';
       const method = editingProperty ? 'PUT' : 'POST';
-
       const response = await signedFetch(url, method, propertyData);
 
       if (!response.ok) {
@@ -199,7 +197,6 @@ export default function PropertiesPage() {
 
       setIsFormOpen(false);
       setEditingProperty(null);
-
       await fetchProperties();
       await fetchCategories();
     } catch (err) {
@@ -212,7 +209,33 @@ export default function PropertiesPage() {
     setEditingProperty(null);
   };
 
-  // Loading state
+  // Aucun espace sélectionné : message clair
+  if (!current?.id && !loading) {
+    return (
+      <PageLayout variant="green">
+        <PageHeader
+          title="Propriétés Linguistiques"
+          icon="🏷️"
+          titleGradient="from-green-600 via-blue-600 to-purple-600"
+          stats={[]}
+        />
+        <ContentSection>
+          <EmptyState
+            icon="🌌"
+            title="Aucun espace sélectionné"
+            description="Sélectionnez ou créez un slang‑space pour gérer vos propriétés."
+            actionButton={{
+              label: 'Créer / choisir un espace',
+              onClick: () => (location.href = '/spaces'),
+              gradient:
+                'bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600',
+            }}
+          />
+        </ContentSection>
+      </PageLayout>
+    );
+  }
+
   if (loading && properties.length === 0) {
     return (
       <LoadingScreen
@@ -223,7 +246,6 @@ export default function PropertiesPage() {
     );
   }
 
-  // Error state
   if (error && properties.length === 0) {
     return (
       <ErrorState
@@ -235,7 +257,6 @@ export default function PropertiesPage() {
     );
   }
 
-  // Préparer les stats pour le header
   const headerStats = [
     {
       icon: '📊',
@@ -243,12 +264,7 @@ export default function PropertiesPage() {
       value: serverPagination.totalCount,
       color: 'green' as const,
     },
-    {
-      icon: '📂',
-      label: 'catégories',
-      value: availableCategories.length,
-      color: 'blue' as const,
-    },
+    { icon: '📂', label: 'catégories', value: availableCategories.length, color: 'blue' as const },
     {
       icon: '📄',
       label: `Page ${pagination.currentPage} / ${serverPagination.totalPages}`,
@@ -259,7 +275,6 @@ export default function PropertiesPage() {
 
   return (
     <PageLayout variant="green">
-      {/* Header */}
       <PageHeader
         title="Propriétés Linguistiques"
         icon="🏷️"
@@ -275,7 +290,6 @@ export default function PropertiesPage() {
         }}
       />
 
-      {/* Search and Filter */}
       <ContentSection>
         <PropertySearchAndFilter
           onSearch={handleSearch}
@@ -286,12 +300,10 @@ export default function PropertiesPage() {
         />
       </ContentSection>
 
-      {/* Main Content */}
       <ContentContainer
         loading={loading && properties.length > 0}
         loadingMessage="Actualisation..."
       >
-        {/* Empty state */}
         {properties.length === 0 && !loading ? (
           <EmptyState
             icon={serverPagination.totalCount === 0 ? '🏷️' : '🔍'}
@@ -314,7 +326,6 @@ export default function PropertiesPage() {
           />
         ) : (
           <>
-            {/* Properties Grid */}
             <div className="mb-6 sm:mb-8">
               <AnimatedGrid columns={4} gap="md">
                 {properties.map((property) => (
@@ -328,7 +339,6 @@ export default function PropertiesPage() {
               </AnimatedGrid>
             </div>
 
-            {/* Pagination */}
             {serverPagination.totalPages > 1 && (
               <ContentSection>
                 <Pagination
@@ -346,7 +356,6 @@ export default function PropertiesPage() {
         )}
       </ContentContainer>
 
-      {/* Form Modal */}
       {isFormOpen && (
         <PropertyForm
           property={editingProperty}

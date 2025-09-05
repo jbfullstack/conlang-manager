@@ -1,6 +1,7 @@
 'use client';
 
 import { ReactNode } from 'react';
+import { useSpace } from '@/app/components/providers/SpaceProvider';
 
 interface StatBadge {
   icon: string;
@@ -40,6 +41,7 @@ export default function PageHeader({
   actionButton,
   children,
 }: PageHeaderProps) {
+  const { role } = useSpace();
   return (
     <div className="bg-white/80 backdrop-blur-sm rounded-xl sm:rounded-2xl shadow-xl border border-white/20 p-4 sm:p-6 lg:p-8">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between space-y-4 lg:space-y-0">
@@ -49,6 +51,11 @@ export default function PageHeader({
           >
             <span className="mr-3 text-3xl sm:text-4xl">{icon}</span>
             {title}
+            {role === 'MADROLE' && (
+              <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-gradient-to-r from-pink-500 to-purple-500 text-white">
+                ✨ mad vibes
+              </span>
+            )}
           </h1>
 
           {/* Stats badges */}

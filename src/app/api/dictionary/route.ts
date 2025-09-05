@@ -4,6 +4,8 @@ import { prisma } from '@/lib/prisma';
 export async function GET(request: NextRequest) {
   try {
     const url = new URL(request.url);
+    const spaceId = request.headers.get('x-space-id') || url.searchParams.get('spaceId') || '';
+    if (!spaceId) return NextResponse.json({ error: 'SPACE_REQUIRED' }, { status: 400 });
     const q = url.searchParams.get('q') ?? '';
     const conceptPage = Math.max(1, Number(url.searchParams.get('conceptPage') ?? '1'));
     const conceptPageSize = Math.max(1, Number(url.searchParams.get('conceptPageSize') ?? '6'));
@@ -11,7 +13,7 @@ export async function GET(request: NextRequest) {
     const comboPageSize = Math.max(1, Number(url.searchParams.get('comboPageSize') ?? '6'));
 
     // Concepts
-    let conceptWhere: any = { isActive: true };
+    let conceptWhere: any = { spaceId, isActive: true };
     if (q) {
       const term = q.toLowerCase();
       conceptWhere.OR = [
@@ -19,29 +21,24 @@ export async function GET(request: NextRequest) {
         { definition: { contains: term, mode: 'insensitive' } },
         {
           conceptProperties: {
-            some: { property: { name: { contains: term, mode: 'insensitive' } }
-            }
-          }
-        }
+            some: { property: { name: { contains: term, mode: 'insensitive' } } },
+          },
+        },
       ];
     }
 
     const conceptsTotal = await prisma.concept.count({ where: conceptWhere });
     const concepts = await prisma.concept.findMany({
       where: conceptWhere,
-      orderBy: [
-        { isActive: 'desc' },
-        { usageFrequency: 'desc' },
-        { mot: 'asc' }
-      ],
+      orderBy: [{ isActive: 'desc' }, { usageFrequency: 'desc' }, { mot: 'asc' }],
       skip: (conceptPage - 1) * conceptPageSize,
       take: conceptPageSize,
       include: {
         user: { select: { username: true } },
         conceptProperties: {
-          include: { property: { select: { name: true } } }
-        }
-      }
+          include: { property: { select: { name: true } } },
+        },
+      },
     });
 
     const conceptItems = concepts.map((c) => ({
@@ -54,14 +51,14 @@ export async function GET(request: NextRequest) {
 
     // Combinaisons
     const combTotal = await prisma.combination.count({
-      where: { statut: { not: 'REFUSE' } }
+      where: { spaceId, statut: { not: 'REFUSE' } },
     });
 
     const combinations = await prisma.combination.findMany({
-      where: { statut: { not: 'REFUSE' } },
+      where: { spaceId, statut: { not: 'REFUSE' } },
       orderBy: { createdAt: 'desc' },
       skip: (comboPage - 1) * comboPageSize,
-      take: comboPageSize
+      take: comboPageSize,
     });
 
     const combItems = combinations.map((cb) => ({
@@ -69,15 +66,14 @@ export async function GET(request: NextRequest) {
       type: 'combination',
       label: cb.sens || '',
       description: cb.description,
-      pattern: cb.pattern ? JSON.parse(cb.pattern) : []
+      pattern: cb.pattern ? JSON.parse(cb.pattern) : [],
     })) as any[];
 
     const totalCount = conceptsTotal + combTotal;
     const totalPagesConcepts = Math.ceil(conceptsTotal / conceptPageSize) || 1;
-    const totalPagesComb = Math.ceil (combTotal / comboPageSize) || 1; // attention syntax
+    const totalPagesComb = Math.ceil(combTotal / comboPageSize) || 1; // attention syntax
   } catch (error) {
     console.error('Dictionary API error:', error);
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
   }
-
 }

@@ -1,30 +1,27 @@
-// src/app/api/compositions/route.ts
-import { NextResponse } from 'next/server'
-import crypto from 'crypto'
-import { prisma } from '@/lib/prisma'
-
-export const runtime = 'nodejs' // for crypto
+import { NextResponse } from 'next/server';
+import crypto from 'crypto';
+import { prisma } from '@/lib/prisma';
 
 function patternHash(pattern: string[]) {
-  return crypto.createHash('sha256').update(JSON.stringify(pattern)).digest('hex')
+  return crypto.createHash('sha256').update(JSON.stringify(pattern)).digest('hex');
 }
 
-// --- POST /api/compositions ---
 export async function POST(req: Request) {
   try {
-    const { pattern, sens, description, statut, source, confidenceScore } = await req.json()
+    const url = new URL(req.url);
+    const spaceId = req.headers.get('x-space-id') || url.searchParams.get('spaceId') || '';
+    if (!spaceId) return NextResponse.json({ error: 'SPACE_REQUIRED' }, { status: 400 });
 
-    const hash = patternHash(pattern)
+    const { pattern, sens, description, statut, source, confidenceScore } = await req.json();
+    const hash = patternHash(pattern);
 
-    const existing = await prisma.combination.findFirst({
-      where: { patternHash: hash },
-    })
-    if (existing) {
-      return NextResponse.json({ error: 'COMPOSITION_EXISTS', existing }, { status: 409 })
-    }
+    const existing = await prisma.combination.findFirst({ where: { spaceId, patternHash: hash } });
+    if (existing)
+      return NextResponse.json({ error: 'COMPOSITION_EXISTS', existing }, { status: 409 });
 
     const combination = await prisma.combination.create({
       data: {
+        spaceId,
         pattern: JSON.stringify(pattern),
         patternHash: hash,
         sens,
@@ -33,19 +30,23 @@ export async function POST(req: Request) {
         source,
         confidenceScore,
       },
-    })
+    });
 
-    return NextResponse.json(combination, { status: 201 })
+    return NextResponse.json(combination, { status: 201 });
   } catch (error) {
-    console.error('Erreur sauvegarde combination:', error)
-    return NextResponse.json({ error: 'Erreur lors de la sauvegarde' }, { status: 500 })
+    return NextResponse.json({ error: 'Erreur lors de la sauvegarde' }, { status: 500 });
   }
 }
 
-// --- GET /api/compositions ---
-export async function GET(_req: Request) {
+export async function GET(req: Request) {
   try {
+    const url = new URL(req.url);
+    const spaceId =
+      (req.headers as any).get?.('x-space-id') || url.searchParams.get('spaceId') || '';
+    if (!spaceId) return NextResponse.json({ error: 'SPACE_REQUIRED' }, { status: 400 });
+
     const compositions = await prisma.combination.findMany({
+      where: { spaceId },
       orderBy: { createdAt: 'desc' },
       take: 50,
       select: {
@@ -59,16 +60,14 @@ export async function GET(_req: Request) {
         createdAt: true,
         createdBy: true,
       },
-    })
+    });
 
-    const formatted = compositions.map((c: { pattern: unknown }) => ({
+    const formatted = compositions.map((c) => ({
       ...c,
       pattern: JSON.parse(c.pattern as unknown as string),
-    }))
-
-    return NextResponse.json(formatted)
-  } catch (error) {
-    console.error('❌ Error fetching compositions:', error)
-    return NextResponse.json({ error: 'Failed to fetch compositions' }, { status: 500 })
+    }));
+    return NextResponse.json(formatted);
+  } catch {
+    return NextResponse.json({ error: 'Failed to fetch compositions' }, { status: 500 });
   }
 }

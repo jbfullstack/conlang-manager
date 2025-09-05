@@ -1,3 +1,4 @@
+// src/app/compositions/page.tsx
 'use client';
 
 import React, { useCallback, useMemo, useState } from 'react';
@@ -53,8 +54,12 @@ export default function CompositionPage() {
   } = useCompositionPermissions();
 
   // --- Data
-  const { concepts, loading: conceptsLoading } = useConcepts();
-  const { communityComps, loading: compsLoading, refreshCompositions } = useCompositions();
+  const { concepts } = useConcepts();
+  const {
+    compositions,
+    loading: isCompositionLoading,
+    reload: refreshCompositions,
+  } = useCompositions();
 
   // --- Onglets
   const [mode, setMode] = useState<'manual' | 'ai-search' | 'ai-analyze'>('manual');
@@ -88,7 +93,7 @@ export default function CompositionPage() {
       const mapById = new Map<string, Concept>();
       concepts.forEach((cc) => mapById.set(cc.id, cc));
       const toAdd = ids.map((id) => mapById.get(id)).filter(Boolean) as Concept[];
-      setSelectedConcepts(toAdd); // on remplace pour respecter l’ordre exact de la comp
+      setSelectedConcepts(toAdd);
     },
     [concepts],
   );
@@ -127,11 +132,6 @@ export default function CompositionPage() {
     if (!aiReverseInput.trim()) return;
     setAiLoading(true);
     try {
-      // const resp = await fetch('/api/search-reverse', {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify({ frenchInput: aiReverseInput }),
-      // });
       const resp = await fetchPostSearchReverse({ frenchInput: aiReverseInput });
       const data = await resp.json();
       const result: CompositionResult = {
@@ -162,11 +162,6 @@ export default function CompositionPage() {
 
     setAiLoading(true);
     try {
-      // const resp = await fetch('/api/analyze-composition', {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify({ composition }),
-      // });
       const resp = await fetchPostAnalyzeComposition({ composition });
       const data = await resp.json();
       setCompositionResult(data);
@@ -182,12 +177,10 @@ export default function CompositionPage() {
     }
   };
 
-  // --- Sauvegarde IA
   const openSaveModal = () => {
     if (compositionResult || selectedConcepts.length > 0) {
       setSaveFormData((p) => ({
         ...p,
-        // si l'utilisateur a saisi quelque chose en IA Reverse, on le met en priorité
         sens: aiReverseInput?.trim() || compositionResult?.sens || '',
         description: compositionResult?.justification ?? '',
       }));
@@ -195,7 +188,6 @@ export default function CompositionPage() {
     }
   };
 
-  // --- Refresh global après création
   const refreshAfterCreation = async () => {
     try {
       if (!user?.id) {
@@ -205,15 +197,14 @@ export default function CompositionPage() {
         await refreshCompositions();
         return;
       }
-      await incrementComposition(user.id); // <-- id explicite
-      await refreshUsage(); // <-- sans argument (signature existante)
+      await incrementComposition(user.id);
+      await refreshUsage();
       await refreshCompositions();
     } catch (e) {
       console.error(e);
     }
   };
 
-  // --- Création manuelle avec gestion 409 (doublon)
   const createManualComposition = async () => {
     if (selectedConcepts.length < 2) {
       alert('Sélectionnez au moins 2 concepts pour une composition manuelle.');
@@ -256,7 +247,6 @@ export default function CompositionPage() {
         return;
       }
 
-      // OK
       setSelectedConcepts([]);
       setManualSens('');
       setManualDescription('');
@@ -269,13 +259,10 @@ export default function CompositionPage() {
   };
 
   const selectedConceptsForModal = useMemo(() => {
-    // 1) si l'IA a renvoyé des IDs (pattern), on mappe direct
     if (compositionResult?.pattern?.length) {
       const byId = new Map(concepts.map((c) => [c.id, c]));
       return compositionResult.pattern.map((id) => byId.get(id)).filter(Boolean) as Concept[];
     }
-
-    // 2) sinon, si l'IA a renvoyé des mots, on mappe mot -> id -> Concept
     if (compositionResult?.patternWords?.length) {
       const byMot = new Map(concepts.map((c) => [c.mot.toLowerCase(), c]));
       const mapped = compositionResult.patternWords
@@ -283,34 +270,23 @@ export default function CompositionPage() {
         .filter(Boolean) as Concept[];
       if (mapped.length >= 2) return mapped;
     }
-
-    // 3) fallback : garder la sélection UI actuelle
     return selectedConcepts;
   }, [compositionResult, concepts, selectedConcepts]);
 
-  // --- Sauvegarde (IA) identique
   const handleSaveComposition = async () => {
-    // 1) si l'IA a déjà renvoyé des IDs, on les utilise directement
     let finalPattern: string[] | undefined =
       compositionResult?.pattern && compositionResult.pattern.length > 0
         ? compositionResult.pattern
         : undefined;
 
-    // 2) sinon, si l'IA a renvoyé des mots, on mappe vers les IDs connus
     if (!finalPattern && compositionResult?.patternWords?.length) {
-      const idByMot = new Map(concepts.map((c) => [c.mot.toLowerCase(), c.id])); // concepts dispo via useConcepts()
+      const idByMot = new Map(concepts.map((c) => [c.mot.toLowerCase(), c.id]));
       const mapped = compositionResult.patternWords
         .map((w) => idByMot.get((w || '').toLowerCase()))
         .filter(Boolean) as string[];
-      if (mapped.length >= 2) {
-        finalPattern = mapped;
-      }
+      if (mapped.length >= 2) finalPattern = mapped;
     }
-
-    // 3) sinon, fallback sur la sélection de l'UI
-    if (!finalPattern) {
-      finalPattern = selectedConcepts.map((c) => c.id);
-    }
+    if (!finalPattern) finalPattern = selectedConcepts.map((c) => c.id);
 
     const payload = {
       pattern: finalPattern,
@@ -351,9 +327,6 @@ export default function CompositionPage() {
     }
   };
 
-  // const maxPerDay = LIMITS_BY_ROLE[user?.role ?? 'USER'] ?? 5;
-  // const remaining = Math.max(0, maxPerDay - (compositionsCreated ?? 0));
-
   if (isLoading) return <div>Chargement...</div>;
   if (!isAuthenticated) return <div>Pas connecté</div>;
 
@@ -376,7 +349,7 @@ export default function CompositionPage() {
       </div>
 
       <div className="max-w-7xl mx-auto p-3 sm:p-6 space-y-4 sm:space-y-6">
-        {/* ====== HEADER AVEC BADGES + ONGLETS (charte d’origine) ====== */}
+        {/* ====== HEADER ====== */}
         <div className="bg-white/80 backdrop-blur-sm rounded-xl sm:rounded-2xl shadow-xl border border-white/20 p-4 sm:p-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 space-y-3 sm:space-y-0">
             <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent flex items-center">
@@ -387,16 +360,15 @@ export default function CompositionPage() {
             <div className="flex items-center space-x-2 sm:space-x-4 text-xs sm:text-sm text-gray-600">
               <div className="flex items-center bg-blue-50 px-2 sm:px-3 py-1 rounded-full">
                 <span className="mr-1">🧠</span>
-                <span className="font-medium">{concepts.length}</span>
+                <span className="font-medium">{concepts?.length ?? 0}</span>
                 <span className="hidden sm:inline ml-1">concepts</span>
               </div>
               <div className="flex items-center bg-purple-50 px-2 sm:px-3 py-1 rounded-full">
                 <span className="mr-1">📚</span>
-                <span className="font-medium">{communityComps.length}</span>
+                <span className="font-medium">{compositions?.length ?? 0}</span>
                 <span className="hidden sm:inline ml-1">compositions</span>
               </div>
               {isLoading ? (
-                // skeleton simple, charte conservée (badge gris)
                 <span className="inline-flex items-center rounded-full border px-3 py-1 text-sm bg-gray-100 text-gray-500">
                   chargement…
                 </span>
@@ -411,7 +383,6 @@ export default function CompositionPage() {
                   </div>
                 )
               )}
-              ;
               <div className="flex items-center bg-purple-50 px-2 sm:px-3 py-1 rounded-full">
                 <span className="font-medium">{user?.role}</span>
               </div>
@@ -448,7 +419,7 @@ export default function CompositionPage() {
               <div className="relative group">
                 <button
                   disabled
-                  className="px-3 sm:px-4 py-2 sm:py-3 rounded-lg sm:rounded-xl flex items-center justify-center sm:justify-start space-x-2 font-medium bg-gray-100 text-gray-400 cursor-not-allowed opacity-60"
+                  className="px-3 sm:px-4 py-2 sm:py-3 rounded-lg sm:rounded-XL flex items-center justify-center sm:justify-start space-x-2 font-medium bg-gray-100 text-gray-400 cursor-not-allowed opacity-60"
                 >
                   <span className="text-lg">🔍</span>
                   <span className="text-sm sm:text-base">Recherche IA</span>
@@ -456,7 +427,7 @@ export default function CompositionPage() {
                     PRO
                   </span>
                 </button>
-                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-black text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-black text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none">
                   Réservé aux comptes Premium
                 </div>
               </div>
@@ -486,14 +457,13 @@ export default function CompositionPage() {
                     PRO
                   </span>
                 </button>
-                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-black text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-black text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none">
                   Réservé aux comptes Premium
                 </div>
               </div>
             )}
           </div>
 
-          {/* Message d’info + compteur restantes */}
           <div className="p-3 sm:p-4 bg-gradient-to-r from-gray-50 to-blue-50 rounded-lg sm:rounded-xl border border-gray-200">
             {hasReachedCompositionLimit ? (
               <div className="text-center">
@@ -528,36 +498,13 @@ export default function CompositionPage() {
               </div>
             )}
           </div>
-
-          {/* Bandeau Upgrade (identique) */}
-          {user?.role === 'USER' && !canUseAISearch && (
-            <div className="mt-4 p-4 bg-gradient-to-r from-orange-50 to-yellow-50 border border-orange-200 rounded-lg">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="text-sm font-semibold text-orange-800 mb-1">
-                    🚀 Débloquez les fonctionnalités IA !
-                  </h4>
-                  <p className="text-xs text-orange-700">
-                    Passez Premium pour accéder à la recherche et l'analyse par IA, plus de
-                    compositions par jour, et plus de concepts par composition.
-                  </p>
-                </div>
-                <button className="ml-4 px-4 py-2 bg-orange-500 text-white text-sm rounded-lg hover:bg-orange-600 transition-colors">
-                  Upgrade
-                </button>
-              </div>
-            </div>
-          )}
         </div>
 
-        {/* ====== LAYOUT PRINCIPAL ====== */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
-          {/* Colonne gauche : Concepts */}
           <div className="lg:col-span-1 order-2 lg:order-1">
             <ConceptsAvailable concepts={concepts} onSelect={addConceptToPattern} pageSize={6} />
           </div>
 
-          {/* Colonne droite : panneaux selon le mode */}
           <div className="lg:col-span-2 space-y-4 lg:space-y-6 order-1 lg:order-2">
             {mode === 'manual' && (
               <ManualComposer
@@ -627,7 +574,7 @@ export default function CompositionPage() {
                   </p>
                 </div>
               ))}
-            {/* Résultat IA - avec vérification de sauvegarde */}
+
             {compositionResult && (
               <CompositionResultPanel
                 compositionResult={compositionResult}
@@ -644,23 +591,21 @@ export default function CompositionPage() {
           </div>
         </div>
 
-        {/* Compositions récentes (inchangé) */}
         <div className="order-3">
-          {compsLoading ? (
+          {isCompositionLoading ? (
             <div className="bg-white/80 backdrop-blur-sm rounded-xl sm:rounded-2xl shadow-lg p-6 sm:p-8 text-center">
               <div className="animate-spin h-8 w-8 border-3 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
               <p className="text-gray-600">Chargement des compositions...</p>
             </div>
           ) : (
             <CompositionsRecent
-              comps={communityComps}
+              comps={compositions}
               concepts={concepts}
               onUsePattern={handleUsePatternFromComp}
             />
           )}
         </div>
 
-        {/* Modales */}
         {showSaveModal && canCreate && (
           <SaveModal
             isOpen={showSaveModal}

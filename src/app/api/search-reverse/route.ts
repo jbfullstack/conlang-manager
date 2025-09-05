@@ -6,15 +6,17 @@ import { prisma } from '@/lib/prisma';
 export async function POST(request: NextRequest) {
   try {
     const { frenchInput } = await request.json();
+    const spaceId = request.headers.get('x-space-id');
+    if (!spaceId) return NextResponse.json({ error: 'SPACE_REQUIRED' }, { status: 400 });
 
     // Récupérer tous les concepts actifs
     const concepts = await prisma.concept.findMany({
-      where: { isActive: true },
+      where: { spaceId, isActive: true },
       include: {
         conceptProperties: {
-          include: { property: true }
-        }
-      }
+          include: { property: true },
+        },
+      },
     });
 
     // Prompt optimisé: liste des primitives avec leurs propriétés utilisées (limitées)
@@ -30,7 +32,9 @@ export async function POST(request: NextRequest) {
               .map((cp: any) => cp.property?.name)
               .filter(Boolean)
               .join(', ');
-            return `- "${c.mot}" = ${c.definition} (type: ${c.type}${props ? `, propriétés: ${props}` : ''})`;
+            return `- "${c.mot}" = ${c.definition} (type: ${c.type}${
+              props ? `, propriétés: ${props}` : ''
+            })`;
           })
           .join('\n')}
 

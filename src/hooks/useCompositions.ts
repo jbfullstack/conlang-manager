@@ -1,65 +1,46 @@
-import { useEffect, useState, useCallback } from 'react';
-import { fetchCompositions } from '@/utils/api-client';
+// src/hooks/useCompositions.ts
+'use client';
+
+import { useCallback, useEffect, useState } from 'react';
+import { fetch } from '@/utils/api-client';
+import { useSpace } from '@/app/components/providers/SpaceProvider';
+
+type Composition = {
+  id: string;
+  pattern: string[] | string;
+  sens?: string;
+  description?: string;
+  statut?: string;
+  createdAt?: string;
+};
 
 export function useCompositions() {
-  const [comps, setComps] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { current } = useSpace();
+  const [compositions, setCompositions] = useState<Composition[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const fetch = useCallback(async () => {
+  const load = useCallback(async () => {
+    if (!current?.id) return; // attendre l’espace
     setLoading(true);
+    setError(null);
     try {
-      console.log('📚 Fetching compositions...');
-      const response = await fetchCompositions();
-      
-      console.log('📚 Response status:', response.status, response.statusText);
-      
-      // Vérifier le status avant de parser JSON
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      // Vérifier le content-type
-      const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        const text = await response.text();
-        console.error('📚 Response is not JSON:', text);
-        throw new Error('Response is not JSON');
-      }
-      
-      // Parser JSON seulement si tout est OK
-      const data = await response.json();
-      console.log('📚 Received data:', data);
-      
-      const list = Array.isArray(data)
-        ? data
-        : Array.isArray(data?.compositions)
-          ? data.compositions
-          : [];
-          
-      console.log('📚 Processed list:', list.length, 'compositions');
-      setComps(list);
-      
-    } catch (error) {
-      console.error('📚 Error fetching compositions:', error);
-      setComps([]);
+      const res = await fetch(`/api/compositions?spaceId=${current.id}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setCompositions(Array.isArray(data) ? data : data.compositions || []);
+    } catch (e: any) {
+      console.error('📚 Error fetching compositions:', e);
+      setError(e?.message || 'Erreur réseau');
+      setCompositions([]);
     } finally {
       setLoading(false);
     }
-  }, []);
-
-  // AJOUTEZ CETTE FONCTION :
-  const refreshCompositions = useCallback(async () => {
-    console.log('🔄 Refreshing compositions...');
-    await fetch();
-  }, [fetch]);
+  }, [current?.id]);
 
   useEffect(() => {
-    fetch();
-  }, [fetch]);
+    load();
+  }, [load]);
 
-  return { 
-    communityComps: comps, 
-    loading,
-    refreshCompositions // ← AJOUTEZ CETTE LIGNE
-  };
+  return { compositions, loading, error, reload: load };
 }

@@ -7,7 +7,7 @@ import {
   ReactNode,
   ReactPortal,
 } from 'react';
-import { getCategoryLabel, getCategoriesByGroup } from '../../../../lib/categories';
+import { getCategoryLabel, getCategoriesByGroup } from '@/lib/categories';
 
 interface PropertySearchAndFilterProps {
   onSearch: (searchTerm: string, categoryFilter: string, activeFilter: string) => void;

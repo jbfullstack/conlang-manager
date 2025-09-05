@@ -1,4 +1,8 @@
+import { useSpace } from '@/app/components/providers/SpaceProvider';
+
 export default function DashboardPage() {
+  const { role, current } = useSpace();
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
@@ -6,6 +10,11 @@ export default function DashboardPage() {
           <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
           <p className="text-gray-600">Vue d'ensemble de votre langue construite</p>
         </div>
+        {role === 'MADROLE' && (
+          <p className="mt-2 text-xs text-gray-500">
+            Bienvenue sur <span className="font-medium">{current?.name}</span> — mode MAD activé.
+          </p>
+        )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <div className="bg-white p-6 rounded-lg shadow">
@@ -13,19 +22,19 @@ export default function DashboardPage() {
             <p className="text-3xl font-bold text-blue-600">5</p>
             <p className="text-sm text-gray-500">Concepts primitifs actifs</p>
           </div>
-          
+
           <div className="bg-white p-6 rounded-lg shadow">
             <h3 className="text-lg font-semibold text-gray-700">Combinaisons</h3>
             <p className="text-3xl font-bold text-green-600">3</p>
             <p className="text-sm text-gray-500">Combinaisons créées</p>
           </div>
-          
+
           <div className="bg-white p-6 rounded-lg shadow">
             <h3 className="text-lg font-semibold text-gray-700">Utilisateurs</h3>
             <p className="text-3xl font-bold text-purple-600">4</p>
             <p className="text-sm text-gray-500">Contributeurs actifs</p>
           </div>
-          
+
           <div className="bg-white p-6 rounded-lg shadow">
             <h3 className="text-lg font-semibold text-gray-700">En Attente</h3>
             <p className="text-3xl font-bold text-yellow-600">1</p>
@@ -49,7 +58,9 @@ export default function DashboardPage() {
                   <span className="font-medium">tomu</span>
                   <p className="text-sm text-gray-600">mouvement rapide, vitesse</p>
                 </div>
-                <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">action</span>
+                <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
+                  action
+                </span>
               </div>
             </div>
           </div>

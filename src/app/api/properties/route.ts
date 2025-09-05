@@ -4,25 +4,27 @@ import { prisma } from '@/lib/prisma';
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    
+    const spaceId = request.headers.get('x-space-id') || searchParams.get('spaceId') || '';
+    if (!spaceId) return NextResponse.json({ error: 'SPACE_REQUIRED' }, { status: 400 });
+
     // Paramètres de recherche et filtrage
     const search = searchParams.get('search');
     const category = searchParams.get('category');
     const status = searchParams.get('status'); // active/inactive/all
     const includeConcepts = searchParams.get('include') === 'concepts';
-    
+
     // Paramètres de pagination
     const page = Math.max(1, parseInt(searchParams.get('page') || '1'));
     const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get('pageSize') || '12')));
-    
+
     // Mode de compatibilité pour l'autocomplétion existante
     const activeOnly = searchParams.get('active') !== 'false';
     const limit = parseInt(searchParams.get('limit') || '0');
-    
+
     // Mode legacy (autocomplétion) - comportement existant
     if (limit > 0) {
-      let where: any = {};
-      
+      const where: any = { spaceId };
+
       if (activeOnly) {
         where.isActive = true;
       }
@@ -30,7 +32,7 @@ export async function GET(request: NextRequest) {
       if (search) {
         where.OR = [
           { name: { contains: search, mode: 'insensitive' } },
-          { description: { contains: search, mode: 'insensitive' } }
+          { description: { contains: search, mode: 'insensitive' } },
         ];
       }
 
@@ -40,32 +42,29 @@ export async function GET(request: NextRequest) {
 
       const properties = await prisma.property.findMany({
         where,
-        orderBy: [
-          { usageCount: 'desc' },
-          { name: 'asc' }
-        ],
-        take: limit
+        orderBy: [{ usageCount: 'desc' }, { name: 'asc' }],
+        take: limit,
       });
 
       const categories = await prisma.property.findMany({
-        where: { isActive: true },
+        where: { spaceId, isActive: true },
         select: { category: true },
-        distinct: ['category']
+        distinct: ['category'],
       });
 
       const uniqueCategories = categories
-        .map(p => p.category)
+        .map((p) => p.category)
         .filter(Boolean)
         .sort();
 
-      return NextResponse.json({ 
+      return NextResponse.json({
         properties,
-        categories: uniqueCategories
+        categories: uniqueCategories,
       });
     }
 
     // Nouveau mode paginé avec filtrage global
-    let where: any = {};
+    let where: any = { spaceId };
 
     // Filtrage par statut
     if (status === 'active') {
@@ -80,7 +79,7 @@ export async function GET(request: NextRequest) {
       where.OR = [
         { name: { contains: search, mode: 'insensitive' } },
         { description: { contains: search, mode: 'insensitive' } },
-        { category: { contains: search, mode: 'insensitive' } }
+        { category: { contains: search, mode: 'insensitive' } },
       ];
     }
 
@@ -102,24 +101,26 @@ export async function GET(request: NextRequest) {
       orderBy: [
         { isActive: 'desc' }, // Propriétés actives en premier
         { usageCount: 'desc' }, // Puis par usage
-        { name: 'asc' } // Puis par nom alphabétique
+        { name: 'asc' }, // Puis par nom alphabétique
       ],
       skip,
       take: pageSize,
-      include: includeConcepts ? {
-        conceptProperties: {
-          include: {
-            concept: {
-              select: {
-                id: true,
-                mot: true,
-                type: true,
-                isActive: true
-              }
-            }
+      include: includeConcepts
+        ? {
+            conceptProperties: {
+              include: {
+                concept: {
+                  select: {
+                    id: true,
+                    mot: true,
+                    type: true,
+                    isActive: true,
+                  },
+                },
+              },
+            },
           }
-        }
-      } : undefined
+        : undefined,
     });
 
     // Informations de pagination
@@ -131,20 +132,19 @@ export async function GET(request: NextRequest) {
       hasNext: page < totalPages,
       hasPrev: page > 1,
       startItem: totalCount > 0 ? skip + 1 : 0,
-      endItem: Math.min(skip + pageSize, totalCount)
+      endItem: Math.min(skip + pageSize, totalCount),
     };
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       properties,
       pagination,
       totalCount, // Pour compatibilité
     });
-    
   } catch (error) {
     console.error('Erreur GET properties:', error);
     return NextResponse.json(
       { error: 'Erreur serveur lors de la récupération des propriétés' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -153,32 +153,33 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { name, description, category, isActive = true, autoComplete = false } = body;
+    const spaceId =
+      request.headers.get('x-space-id') || new URL(request.url).searchParams.get('spaceId') || '';
+    if (!spaceId) return NextResponse.json({ error: 'SPACE_REQUIRED' }, { status: 400 });
 
     // Validation de base
     if (!name?.trim()) {
-      return NextResponse.json(
-        { error: 'Le nom de la propriété est requis' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Le nom de la propriété est requis' }, { status: 400 });
     }
 
     // Si c'est pour l'autocomplétion (comportement existant)
     if (autoComplete) {
       // Vérifier si la propriété existe déjà
       const existing = await prisma.property.findFirst({
-        where: { 
+        where: {
+          spaceId,
           name: {
             equals: name.trim().toLowerCase(),
-            mode: 'insensitive'
-          }
-        }
+            mode: 'insensitive',
+          },
+        },
       });
 
       if (existing) {
         // Incrémenter le usage count si elle existe
         const updated = await prisma.property.update({
           where: { id: existing.id },
-          data: { usageCount: { increment: 1 } }
+          data: { usageCount: { increment: 1 } },
         });
         return NextResponse.json({ property: updated });
       }
@@ -186,12 +187,13 @@ export async function POST(request: NextRequest) {
       // Créer la nouvelle propriété avec usage count 1
       const property = await prisma.property.create({
         data: {
+          spaceId,
           name: name.trim().toLowerCase(),
           description: description?.trim(),
           category: category?.trim() || 'custom',
           usageCount: 1,
-          isActive: true
-        }
+          isActive: true,
+        },
       });
 
       return NextResponse.json({ property }, { status: 201 });
@@ -201,28 +203,28 @@ export async function POST(request: NextRequest) {
     if (!description?.trim() || !category?.trim()) {
       return NextResponse.json(
         { error: 'Les champs nom, description et catégorie sont obligatoires' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     if (name.length < 2 || name.length > 50) {
       return NextResponse.json(
         { error: 'Le nom doit contenir entre 2 et 50 caractères' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     if (description.length < 10 || description.length > 500) {
       return NextResponse.json(
         { error: 'La description doit contenir entre 10 et 500 caractères' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     if (category.length < 2) {
       return NextResponse.json(
         { error: 'La catégorie doit contenir au moins 2 caractères' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -231,26 +233,24 @@ export async function POST(request: NextRequest) {
       where: {
         name: {
           equals: name.trim(),
-          mode: 'insensitive'
-        }
-      }
+          mode: 'insensitive',
+        },
+      },
     });
 
     if (existingProperty) {
-      return NextResponse.json(
-        { error: 'Une propriété avec ce nom existe déjà' },
-        { status: 409 }
-      );
+      return NextResponse.json({ error: 'Une propriété avec ce nom existe déjà' }, { status: 409 });
     }
 
     // Créer la propriété pour la gestion manuelle
     const newProperty = await prisma.property.create({
       data: {
+        spaceId,
         name: name.trim(),
         description: description.trim(),
         category: category.toLowerCase().trim(),
         isActive: Boolean(isActive),
-        usageCount: 0 // Commence à 0, sera incrémenté lors de l'usage
+        usageCount: 0, // Commence à 0, sera incrémenté lors de l'usage
       },
       include: {
         conceptProperties: {
@@ -259,24 +259,26 @@ export async function POST(request: NextRequest) {
               select: {
                 id: true,
                 mot: true,
-                type: true
-              }
-            }
-          }
-        }
-      }
+                type: true,
+              },
+            },
+          },
+        },
+      },
     });
 
-    return NextResponse.json({
-      message: 'Propriété créée avec succès',
-      property: newProperty
-    }, { status: 201 });
-
+    return NextResponse.json(
+      {
+        message: 'Propriété créée avec succès',
+        property: newProperty,
+      },
+      { status: 201 },
+    );
   } catch (error) {
     console.error('Erreur POST property:', error);
     return NextResponse.json(
       { error: 'Erreur serveur lors de la création de la propriété' },
-      { status: 500 }
+      { status: 500 },
     );
   } finally {
     await prisma.$disconnect();

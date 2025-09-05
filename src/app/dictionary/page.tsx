@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import clsx from 'clsx';
 import { fetch as signedFetch, updateComposition, deleteComposition } from '@/utils/api-client';
 import Pagination from '@/app/components/ui/Pagination'; // ⚠️ Remplacer par la version améliorée avec props `compact` et `variant`
-import StatusSelect from '../components/features/dictionnary/StatusSelect';
+import StatusSelect from '@/app/components/features/dictionnary/StatusSelect';
 
 type Scope = 'all' | 'concepts' | 'combinations';
 type Lang = 'all' | 'conlang' | 'fr';
