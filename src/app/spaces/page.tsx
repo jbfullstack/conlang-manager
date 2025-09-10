@@ -11,7 +11,7 @@ type SpaceRow = {
   id: string;
   name: string;
   description?: string | null;
-  status: 'REQUESTED' | 'ACTIVE' | 'LOCKED' | 'REJECTED';
+  status: 'REJECTED' | 'ACTIVE' | 'REQUESTED' | 'LOCKED' | 'PENDING';
   createdAt?: string;
   updatedAt?: string;
   // optionnel côté serveur: ownerId, etc.
@@ -112,7 +112,7 @@ export default function SpacesPage() {
       const data = await res.json();
       // on accepte data.spaces ou data.items ou data selon ton backend
       const list: SpaceRow[] = data?.spaces || data?.items || data || [];
-      setPending(list.filter((s) => s.status === 'REQUESTED' || s.status === 'LOCKED'));
+      setPending(list.filter((s) => s.status === 'PENDING' || s.status === 'REQUESTED'));
     } catch (e: any) {
       setPendingError('Erreur réseau.');
       setPending([]);
@@ -123,24 +123,61 @@ export default function SpacesPage() {
 
   const approveSpace = useCallback(
     async (id: string) => {
-      const res = await signedFetch(`/api/spaces/${id}`, 'PATCH', { status: 'ACTIVE' });
-      if (!res.ok) {
-        const t = await res.text();
-        alert(t || 'Erreur approbation.');
+      // 1) tentative REST "propre"
+      let res = await signedFetch(`/api/spaces/${id}`, 'PATCH', { status: 'ACTIVE' });
+
+      // 2) fallback si 404 (route dynamique absente)
+      if ((res as any)?.status === 404) {
+        res = await signedFetch(`/api/spaces`, 'PATCH', { id, status: 'ACTIVE' });
       }
+
+      const ok =
+        (res as any)?.ok === true ||
+        (typeof (res as any)?.status === 'number' &&
+          (res as any).status >= 200 &&
+          (res as any).status < 300);
+
+      if (!ok) {
+        try {
+          const j = (res as any)?.data ?? (await (res as any)?.json?.());
+          alert(j?.error || 'Erreur approbation.');
+        } catch {
+          const t = await (res as any)?.text?.();
+          alert(t || 'Erreur approbation.');
+        }
+        return;
+      }
+
       loadPending();
-      // (Optionnel) demander au provider de rafraîchir la liste d’espaces
     },
     [loadPending],
   );
 
   const rejectSpace = useCallback(
     async (id: string) => {
-      const res = await signedFetch(`/api/spaces/${id}`, 'PATCH', { status: 'REJECTED' });
-      if (!res.ok) {
-        const t = await res.text();
-        alert(t || 'Erreur rejet.');
+      let res = await signedFetch(`/api/spaces/${id}`, 'PATCH', { status: 'REJECTED' });
+
+      if ((res as any)?.status === 404) {
+        res = await signedFetch(`/api/spaces`, 'PATCH', { id, status: 'REJECTED' });
       }
+
+      const ok =
+        (res as any)?.ok === true ||
+        (typeof (res as any)?.status === 'number' &&
+          (res as any).status >= 200 &&
+          (res as any).status < 300);
+
+      if (!ok) {
+        try {
+          const j = (res as any)?.data ?? (await (res as any)?.json?.());
+          alert(j?.error || 'Erreur rejet.');
+        } catch {
+          const t = await (res as any)?.text?.();
+          alert(t || 'Erreur rejet.');
+        }
+        return;
+      }
+
       loadPending();
     },
     [loadPending],
