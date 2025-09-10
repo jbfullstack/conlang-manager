@@ -8,8 +8,11 @@ export async function GET(request: NextRequest) {
     await requireAuthDev(request);
     const url = new URL(request.url);
 
-    const spaceId = await resolveSpaceIdOrDefault(request, prisma);
-    await requireSpaceMembership(request, prisma, { minRole: 'MEMBER', explicitSpaceId: spaceId });
+    const authResult = await requireSpaceMembership(request, ['MEMBER']);
+    if (authResult instanceof Response) return authResult;
+
+    const userId = authResult.member.id;
+    const spaceId = await resolveSpaceIdOrDefault(request, userId);
 
     const q = url.searchParams.get('q') ?? '';
     const conceptPage = Math.max(1, Number(url.searchParams.get('conceptPage') ?? '1'));

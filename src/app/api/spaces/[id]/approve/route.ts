@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAuthDev } from '@/lib/api-security-dev';
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   const auth = await requireAuthDev(req);
   if (auth instanceof NextResponse) return auth;
 
@@ -12,7 +12,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       { status: 403 },
     );
 
-  const { id } = params;
+  // Await the params Promise
+  const { id } = await context.params;
   const space = await prisma.space.update({ where: { id }, data: { status: 'ACTIVE' } });
   return NextResponse.json({ space });
 }

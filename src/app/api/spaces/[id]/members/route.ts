@@ -2,10 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireSpaceMembership } from '@/lib/space-security';
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   const r = await requireSpaceMembership(req, ['OWNER', 'MODERATOR', 'MADROLE', 'MEMBER']);
   if (r instanceof Response) return r as any;
-  const { id } = params;
+
+  // Await the params Promise
+  const { id } = await context.params;
 
   const members = await prisma.spaceMember.findMany({
     where: { spaceId: id },
@@ -15,10 +17,12 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   return NextResponse.json({ members });
 }
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   const r = await requireSpaceMembership(req, ['OWNER', 'MODERATOR', 'MADROLE']);
   if (r instanceof Response) return r as any;
-  const { id } = params;
+
+  // Await the params Promise
+  const { id } = await context.params;
   const { userId, role } = await req.json();
 
   const created = await prisma.spaceMember.upsert({
@@ -29,10 +33,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   return NextResponse.json({ member: created }, { status: 201 });
 }
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   const r = await requireSpaceMembership(req, ['OWNER', 'MODERATOR', 'MADROLE']);
   if (r instanceof Response) return r as any;
-  const { id } = params;
+
+  // Await the params Promise
+  const { id } = await context.params;
   const { userId, role, isActive } = await req.json();
 
   const updated = await prisma.spaceMember.update({
@@ -42,10 +48,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   return NextResponse.json({ member: updated });
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   const r = await requireSpaceMembership(req, ['OWNER']);
   if (r instanceof Response) return r as any;
-  const { id } = params;
+
+  // Await the params Promise
+  const { id } = await context.params;
   const { userId } = await req.json();
 
   await prisma.spaceMember.delete({ where: { spaceId_userId: { spaceId: id, userId } } });

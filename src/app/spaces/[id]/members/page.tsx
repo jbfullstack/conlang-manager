@@ -11,27 +11,28 @@ type MemberRow = {
   isActive: boolean;
 };
 
-export default function MembersPage({ params }: { params: { id: string } }) {
+export default async function MembersPage({ params }: { params: Promise<{ id: string }> }) {
   const { current, role } = useSpace();
   const [rows, setRows] = useState<MemberRow[]>([]);
+  const { id } = await params;
 
   const load = async () => {
-    const res = await fetch(`/api/spaces/${params.id}/members?spaceId=${params.id}`);
+    const res = await fetch(`/api/spaces/${id}/members?spaceId=${id}`);
     const d = await res.json();
     setRows(d.members || []);
   };
 
   useEffect(() => {
     load();
-  }, [params.id]);
+  }, [id]);
 
   const updateRole = async (userId: string, newRole: MemberRow['role']) => {
-    await patchSpaceMember(params.id, { userId, role: newRole });
+    await patchSpaceMember(id, { userId, role: newRole });
     load();
   };
 
   const toggleActive = async (userId: string, isActive: boolean) => {
-    await patchSpaceMember(params.id, { userId, isActive });
+    await patchSpaceMember(id, { userId, isActive });
     load();
   };
 

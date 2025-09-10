@@ -5,12 +5,12 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
   try {
     const params = await context.params;
     const { id } = params;
-    
+
     const concept = await prisma.concept.findUnique({
       where: { id },
       include: {
         user: {
-          select: { username: true }
+          select: { username: true },
         },
         conceptProperties: {
           include: {
@@ -19,36 +19,30 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
                 id: true,
                 name: true,
                 description: true,
-                category: true
-              }
-            }
-          }
-        }
-      }
+                category: true,
+              },
+            },
+          },
+        },
+      },
     });
 
     if (!concept) {
-      return NextResponse.json(
-        { error: 'Concept introuvable' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'Concept introuvable' }, { status: 404 });
     }
 
     return NextResponse.json({
       concept: {
         ...concept,
-        proprietes: concept.conceptProperties.map(cp => cp.property.name),
-        propertiesDetails: concept.conceptProperties.map(cp => cp.property),
+        proprietes: concept.conceptProperties.map((cp) => cp.property.name),
+        propertiesDetails: concept.conceptProperties.map((cp) => cp.property),
         exemples: concept.exemples ? JSON.parse(concept.exemples) : [],
-        conceptProperties: undefined
-      }
+        conceptProperties: undefined,
+      },
     });
   } catch (error) {
     console.error('Erreur GET concept:', error);
-    return NextResponse.json(
-      { error: 'Erreur serveur' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
   }
 }
 
@@ -57,36 +51,53 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
     const params = await context.params;
     const { id } = params;
     const body = await request.json();
-    const { mot, definition, type, proprietes, etymologie, exemples, usageFrequency } = body;
+    const { mot, definition, type, proprietes, etymologie, exemples, usageFrequency, spaceId } =
+      body;
+
+    // Récupérer le concept existant pour obtenir le spaceId si pas fourni
+    const existingConcept = await prisma.concept.findUnique({
+      where: { id },
+      select: { spaceId: true },
+    });
+
+    if (!existingConcept) {
+      return NextResponse.json({ error: 'Concept introuvable' }, { status: 404 });
+    }
+
+    const conceptSpaceId = spaceId || existingConcept.spaceId;
 
     // Démarrer une transaction pour assurer la cohérence
     const result = await prisma.$transaction(async (tx) => {
       // 1. Supprimer les anciennes relations de propriétés
       await tx.conceptProperty.deleteMany({
-        where: { conceptId: id }
+        where: { conceptId: id },
       });
 
       // 2. Traiter les nouvelles propriétés
       let newPropertyIds: string[] = [];
-      
+
       if (proprietes && Array.isArray(proprietes)) {
         for (const propName of proprietes) {
-          // Chercher si la propriété existe déjà
-          let property = await tx.property.findUnique({
-            where: { name: propName }
+          // Chercher si la propriété existe déjà dans cet espace
+          let property = await tx.property.findFirst({
+            where: {
+              name: propName,
+              spaceId: conceptSpaceId, // Ajouter le filtre par espace
+            },
           });
-          
+
           // Si elle n'existe pas, la créer
           if (!property) {
             property = await tx.property.create({
               data: {
                 name: propName,
                 category: '', // Catégorie par défaut pour les nouvelles propriétés
-                usageCount: 0
-              }
+                usageCount: 0,
+                spaceId: conceptSpaceId, // AJOUT: spaceId requis
+              },
             });
           }
-          
+
           newPropertyIds.push(property.id);
         }
       }
@@ -101,17 +112,17 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
           etymologie,
           exemples: JSON.stringify(exemples || []),
           usageFrequency: parseFloat(usageFrequency) || 0.5,
-          version: { increment: 1 }
-        }
+          version: { increment: 1 },
+        },
       });
 
       // 4. Créer les nouvelles relations propriété-concept
       if (newPropertyIds.length > 0) {
         await tx.conceptProperty.createMany({
-          data: newPropertyIds.map(propertyId => ({
+          data: newPropertyIds.map((propertyId) => ({
             conceptId: id,
-            propertyId
-          }))
+            propertyId,
+          })),
         });
       }
 
@@ -120,7 +131,7 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
         where: { id },
         include: {
           user: {
-            select: { username: true }
+            select: { username: true },
           },
           conceptProperties: {
             include: {
@@ -129,12 +140,12 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
                   id: true,
                   name: true,
                   description: true,
-                  category: true
-                }
-              }
-            }
-          }
-        }
+                  category: true,
+                },
+              },
+            },
+          },
+        },
       });
 
       return finalConcept;
@@ -142,37 +153,33 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
 
     // 6. Mettre à jour les compteurs d'usage des propriétés (en dehors de la transaction)
     if (result?.conceptProperties) {
-      await updateAllPropertyUsageCounts();
+      await updateAllPropertyUsageCounts(conceptSpaceId);
     }
 
     // 7. Formater la réponse pour maintenir la compatibilité avec le frontend
     return NextResponse.json({
       concept: {
         ...result,
-        proprietes: result?.conceptProperties.map(cp => cp.property.name) || [],
-        propertiesDetails: result?.conceptProperties.map(cp => cp.property) || [],
+        proprietes: result?.conceptProperties.map((cp) => cp.property.name) || [],
+        propertiesDetails: result?.conceptProperties.map((cp) => cp.property) || [],
         exemples: result?.exemples ? JSON.parse(result.exemples) : [],
-        conceptProperties: undefined
-      }
+        conceptProperties: undefined,
+      },
     });
   } catch (error) {
     console.error('Erreur PUT concept:', error);
-    return NextResponse.json(
-      { error: 'Erreur serveur' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
   }
 }
-
 
 export async function DELETE(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
     const params = await context.params;
     const { id } = params;
-    
+
     await prisma.concept.update({
       where: { id },
-      data: { isActive: false }
+      data: { isActive: false },
     });
 
     return NextResponse.json({ message: 'Concept supprimé' });
@@ -182,20 +189,22 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
 }
 
 // Fonction utilitaire pour mettre à jour tous les compteurs d'usage
-async function updateAllPropertyUsageCounts() {
+async function updateAllPropertyUsageCounts(spaceId?: string) {
   try {
+    const whereClause = spaceId ? { spaceId } : {};
     const properties = await prisma.property.findMany({
-      select: { id: true }
+      where: whereClause,
+      select: { id: true },
     });
-    
+
     for (const property of properties) {
       const usageCount = await prisma.conceptProperty.count({
-        where: { propertyId: property.id }
+        where: { propertyId: property.id },
       });
-      
+
       await prisma.property.update({
         where: { id: property.id },
-        data: { usageCount }
+        data: { usageCount },
       });
     }
   } catch (error) {
