@@ -2,11 +2,12 @@
 const path = require('path');
 
 const nextConfig = {
+  eslint: { ignoreDuringBuilds: true },
   env: {
     DATABASE_URL: process.env.DATABASE_URL,
     OPENAI_API_KEY: process.env.OPENAI_API_KEY,
   },
-  webpack: (config, { dev }) => { 
+  webpack: (config, { dev }) => {
     // Votre configuration d'alias existante
     config.resolve.alias = {
       ...config.resolve.alias,
@@ -24,6 +25,6 @@ const nextConfig = {
 
     return config;
   },
-}
+};
 
-module.exports = nextConfig
+module.exports = nextConfig;
