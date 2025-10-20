@@ -1,11 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
-import { requireAuthDev } from '@/lib/api-security-dev';
-
-// src/app/api/spaces/[id]/route.ts
-import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma'; // adjust if your path differs
-import { requireAuthDev } from '@/lib/auth'; // adjust path
+import { requireAuthDev } from '@/lib/api-security-dev';
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const auth = await requireAuthDev(req);
