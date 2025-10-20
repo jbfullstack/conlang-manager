@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useCallback, useMemo, useState } from 'react';
-import { Concept } from '@/interfaces/concept.interface';
+// import { Concept } from '@/interfaces/concept.interface';
 import { fetch as signedFetch } from '@/utils/api-client';
 
 import ConceptsAvailable from '@/app/components/features/composition/ConceptsAvailable';
@@ -27,6 +27,7 @@ import {
   fetchPostCompositions,
   fetchPostSearchReverse,
 } from '@/utils/api-client';
+import { Concept } from '@/interfaces/concept.interface';
 
 type CompositionResult = {
   sens: string;
@@ -234,15 +235,15 @@ export default function CompositionPage() {
           examples: !existing.examples
             ? []
             : Array.isArray(existing.examples)
-            ? existing.examples
-            : JSON.parse(existing.examples || '[]'),
+              ? existing.examples
+              : JSON.parse(existing.examples || '[]'),
         };
         setDuplicateInfo({ open: true, existing: normalized });
         return;
       }
 
       if (!resp.ok) {
-        const err = await resp.json().catch(() => ({} as any));
+        const err = await resp.json().catch(() => ({}) as any);
         alert('Erreur création: ' + (err?.error ?? 'Erreur inconnue'));
         return;
       }
@@ -309,14 +310,14 @@ export default function CompositionPage() {
           examples: !existing.examples
             ? []
             : Array.isArray(existing.examples)
-            ? existing.examples
-            : JSON.parse(existing.examples || '[]'),
+              ? existing.examples
+              : JSON.parse(existing.examples || '[]'),
         };
         setDuplicateInfo({ open: true, existing: normalized });
         return;
       }
       if (!resp.ok) {
-        const err = await resp.json().catch(() => ({} as any));
+        const err = await resp.json().catch(() => ({}) as any);
         alert('Erreur sauvegarde: ' + (err?.error ?? 'Erreur inconnue'));
         return;
       }

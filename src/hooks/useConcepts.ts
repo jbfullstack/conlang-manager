@@ -4,13 +4,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import { fetch } from '@/utils/api-client';
 import { useSpace } from '@/app/components/providers/SpaceProvider';
+import { Concept } from '@/interfaces/concept.interface';
 
-type Concept = {
-  id: string;
-  mot: string;
-  type: string;
-  definition?: string;
-};
+// type Concept = {
+//   id: string;
+//   mot: string;
+//   type: string;
+//   definition?: string;
+// };
 
 export function useConcepts() {
   const { current } = useSpace();
