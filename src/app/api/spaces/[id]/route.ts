@@ -1,12 +1,12 @@
+// src/app/api/spaces/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma'; // adjust if your path differs
+import { prisma } from '@/lib/prisma';
 import { requireAuthDev } from '@/lib/api-security-dev';
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, context: any) {
   const auth = await requireAuthDev(req);
   if (auth instanceof NextResponse) return auth;
 
-  // admin only
   if (auth.user.role !== 'ADMIN') {
     return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 });
   }
@@ -18,7 +18,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     return NextResponse.json({ error: 'BAD_REQUEST' }, { status: 400 });
   }
 
-  const id = params.id;
+  const id = (context?.params?.id ?? '') as string; // <-- no explicit type on arg, narrow here
   const desired = String((body as any)?.status || '').toUpperCase();
 
   if (desired !== 'ACTIVE' && desired !== 'REJECTED') {
