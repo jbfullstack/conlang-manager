@@ -101,7 +101,8 @@ export async function requireUsageLimitDev(
   }
 
   if (process.env.NODE_ENV === 'development') {
-    const limits = FEATURE_FLAGS[authResult.user.role];
+    type Role = keyof typeof FEATURE_FLAGS;
+    const limits = FEATURE_FLAGS[authResult.user.role as Role];
     const bucket = getUsageBucket(authResult.user.id);
 
     const limitMap = {
