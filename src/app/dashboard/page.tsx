@@ -1,3 +1,6 @@
+'use client';
+
+import React from 'react';
 import { useSpace } from '@/app/components/providers/SpaceProvider';
 
 export default function DashboardPage() {
