@@ -18,7 +18,9 @@
     "db:studio": "prisma studio",
     "db:generate": "prisma generate",
     "setup": "npm install && npm run db:start && timeout /t 5 /nobreak && npm run db:push && npm run db:seed",
-    "test": "jest"
+    "test": "jest",
+    "postinstall": "prisma generate",
+    "vercel-build": "prisma generate && prisma migrate deploy && next build"
   },
   "repository": {
     "type": "git",
