@@ -90,7 +90,13 @@ export default function DevHeaderSwitcher() {
     };
   }, [username]);
 
-  const userChip = useMemo(() => USER_CHIPS[username], [username]);
+  // const userChip = useMemo(() => USER_CHIPS[username], [username]);
+  const userChip = USER_CHIPS[username as keyof typeof USER_CHIPS] ?? {
+    cls: '',
+    icon: '🙂',
+    label: username || 'guest',
+  };
+
   const roleChip = useMemo(
     () => (resolved ? ROLE_BADGE[resolved.role] : ROLE_BADGE.USER),
     [resolved],
