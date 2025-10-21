@@ -1,10 +1,9 @@
 import { NextResponse } from 'next/server';
-import {prisma} from '@/lib/prisma';
+import { prisma } from '@/lib/prisma';
 
 export async function GET(req: Request) {
-  
-  if (process.env.NODE_ENV !== 'development') {
-    return NextResponse.json({ error: 'not_found' }, { status: 404 });
+  if (process.env.NODE_ENV !== 'development' && process.env.USE_DEV_AUTH_IN_PROD !== 'true') {
+    return new Response('not_found', { status: 404 });
   }
 
   try {

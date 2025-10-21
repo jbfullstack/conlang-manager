@@ -33,7 +33,8 @@ function getUsageBucket(userId: string): Usage {
 
 // ------------- requireAuth (dev) inchangé (sauf dépendance au getDevUser) -------------
 export async function requireAuthDev(request: NextRequest) {
-  if (process.env.NODE_ENV === 'production') {
+  const allowDevAuthInProd = process.env.USE_DEV_AUTH_IN_PROD === 'true';
+  if (process.env.NODE_ENV === 'production' && !allowDevAuthInProd) {
     const { requireAuth } = await import('@/lib/api-security');
     return requireAuth(request);
   }
