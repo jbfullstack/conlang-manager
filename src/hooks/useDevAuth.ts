@@ -57,28 +57,73 @@ export function useDevAuth(): DevAuthState {
  * - en dev: lit le state posé par DevHeaderSwitcher via useDevAuth()
  * - en prod: lit la session NextAuth
  */
-export function useAuth() {
-  const isDevelopment = process.env.NODE_ENV === 'development';
+// export function useAuth() {
+//   const isDevelopment = process.env.NODE_ENV === 'development';
 
-  // DEV
+//   // DEV
+//   const devAuth = useDevAuth();
+
+//   // PROD (ou dev si tu utilises aussi NextAuth localement)
+//   const { data: session, status } = useSession();
+
+//   // Normalisation des sorties
+//   const user: UnifiedUser | null = isDevelopment
+//     ? devAuth.user
+//     : ((session?.user as unknown as UnifiedUser) ?? null);
+
+//   const role: Role | null = isDevelopment
+//     ? (devAuth.role as Role | null)
+//     : ((session?.user?.role as Role | undefined) ?? null);
+
+//   const isAuthenticated = isDevelopment ? devAuth.isAuthenticated : !!session;
+//   const isLoading = isDevelopment ? devAuth.isLoading : status === 'loading';
+
+//   // Helpers attendus par ton code
+//   const hasRole = (checkRole: Role): boolean => role === checkRole;
+
+//   const hasPermissionCheck = (permission: Permission): boolean => {
+//     if (!isAuthenticated || !role) return false;
+//     return hasPermission(role, permission);
+//   };
+
+//   return {
+//     user,
+//     role,
+//     isAuthenticated,
+//     isLoading,
+//     hasRole,
+//     hasPermission: hasPermissionCheck,
+//     isDev: isDevelopment,
+//   };
+// }
+
+export function useAuth() {
+  // ⚠️ côté client on ne peut lire que des vars préfixées NEXT_PUBLIC_
+  const allowDevAuthInProd = process.env.NEXT_PUBLIC_USE_DEV_AUTH_IN_PROD === 'true';
+
+  // On considère "dev" si (a) build en dev OU (b) on force le mode dev-auth en prod
+  const isDevelopment = process.env.NODE_ENV === 'development' || allowDevAuthInProd;
+
+  // Branche dev (cookie x-dev-username + storage) — inchangé
   const devAuth = useDevAuth();
 
-  // PROD (ou dev si tu utilises aussi NextAuth localement)
+  // Branche NextAuth (prod)
   const { data: session, status } = useSession();
 
-  // Normalisation des sorties
+  // Normalisation des sorties (types conservés)
   const user: UnifiedUser | null = isDevelopment
-    ? devAuth.user
+    ? (devAuth.user as UnifiedUser | null)
     : ((session?.user as unknown as UnifiedUser) ?? null);
 
   const role: Role | null = isDevelopment
-    ? (devAuth.role as Role | null)
+    ? ((devAuth.role as Role | null) ?? null)
     : ((session?.user?.role as Role | undefined) ?? null);
 
-  const isAuthenticated = isDevelopment ? devAuth.isAuthenticated : !!session;
-  const isLoading = isDevelopment ? devAuth.isLoading : status === 'loading';
+  const isAuthenticated: boolean = isDevelopment ? devAuth.isAuthenticated : !!session;
 
-  // Helpers attendus par ton code
+  const isLoading: boolean = isDevelopment ? devAuth.isLoading : status === 'loading';
+
+  // Helpers identiques à ta version
   const hasRole = (checkRole: Role): boolean => role === checkRole;
 
   const hasPermissionCheck = (permission: Permission): boolean => {
