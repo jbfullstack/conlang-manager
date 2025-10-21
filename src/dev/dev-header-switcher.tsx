@@ -1,173 +1,245 @@
+// 'use client';
+
+// import React, { useEffect, useMemo, useState } from 'react';
+// import { fetch as signedFetch } from '@/utils/api-client';
+
+// type UserRole = 'USER' | 'PREMIUM' | 'MODERATOR' | 'ADMIN';
+
+// // --- Les profils visibles dans le switcher (aucun ID ici) ---
+// const DEV_USERNAMES = ['alice', 'bob', 'charlie', 'dave', 'admin'] as const;
+// type DevName = (typeof DEV_USERNAMES)[number];
+
+// // Pastille "utilisateur" (cosmétique, propre à chaque nom)
+// const USER_CHIPS: Record<DevName, { icon: string; cls: string; label: string }> = {
+//   alice: { icon: '🧪', cls: 'bg-sky-100 text-sky-800', label: 'alice' },
+//   bob: { icon: '🧑‍💻', cls: 'bg-indigo-100 text-indigo-800', label: 'bob' },
+//   charlie: { icon: '🧑‍🏫', cls: 'bg-emerald-100 text-emerald-800', label: 'charlie' },
+//   dave: { icon: '🧑‍🚀', cls: 'bg-amber-100 text-amber-800', label: 'dave' },
+//   admin: { icon: '🛠️', cls: 'bg-rose-100 text-rose-800', label: 'admin' },
+// };
+
+// // Pastille "rôle" (icône + couleurs par rôle)
+// const ROLE_BADGE: Record<UserRole, { icon: string; cls: string }> = {
+//   ADMIN: { icon: '👑', cls: 'bg-red-100 text-red-800' },
+//   MODERATOR: { icon: '👮', cls: 'bg-green-100 text-green-800' },
+//   PREMIUM: { icon: '💎', cls: 'bg-purple-100 text-purple-800' },
+//   USER: { icon: '👤', cls: 'bg-gray-100 text-gray-800' },
+// };
+
+// type ResolvedUser = { id: string; username: string; role: UserRole };
+
+// // Helper visuel
+// const shorten = (id?: string, n = 6) => (id ? `${id.slice(0, n)}…${id.slice(-n)}` : '—');
+
+// export default function DevHeaderSwitcher() {
+//   // username choisi (persisté)
+//   const [username, setUsername] = useState<DevName>('alice');
+//   // user résolu depuis la DB
+//   const [resolved, setResolved] = useState<ResolvedUser | null>(null);
+//   const [loading, setLoading] = useState(false);
+//   const [err, setErr] = useState<string | null>(null);
+
+//   // Charger les valeurs persistées au boot
+//   useEffect(() => {
+//     const u = (localStorage.getItem('dev.username') as DevName) || 'alice';
+//     setUsername(DEV_USERNAMES.includes(u) ? u : 'alice');
+//   }, []);
+
+//   // Résolution de l’ID/role depuis la DB à chaque changement de username
+//   useEffect(() => {
+//     let cancelled = false;
+//     async function run() {
+//       setLoading(true);
+//       setErr(null);
+//       try {
+//         const resp = await signedFetch(
+//           `/api/dev/resolve-user?username=${encodeURIComponent(username)}`,
+//         );
+//         if (!resp.ok) {
+//           const t = await resp.text().catch(() => '');
+//           throw new Error(`resolve-user ${resp.status} ${t}`);
+//         }
+//         const data = (await resp.json()) as ResolvedUser;
+//         if (cancelled) return;
+
+//         setResolved(data);
+//         // Expose pour useDevAuth / hooks
+//         localStorage.setItem('dev.username', data.username);
+//         localStorage.setItem('dev.userId', data.id);
+//         localStorage.setItem('dev.role', data.role);
+//         document.cookie = `x-dev-username=${encodeURIComponent(
+//           data.username,
+//         )}; Path=/; SameSite=Lax`;
+//         // (optionnel) si tu veux aussi un id
+//         if (data.id) {
+//           document.cookie = `x-dev-user-id=${encodeURIComponent(data.id)}; Path=/; SameSite=Lax`;
+//         }
+//         // window.location.reload();
+//       } catch (e: any) {
+//         if (!cancelled) {
+//           setResolved(null);
+//           setErr(e?.message ?? 'resolve failed');
+//         }
+//       } finally {
+//         if (!cancelled) setLoading(false);
+//       }
+//     }
+//     run();
+//     return () => {
+//       cancelled = true;
+//     };
+//   }, [username]);
+
+//   // const userChip = useMemo(() => USER_CHIPS[username], [username]);
+//   const userChip = USER_CHIPS[username as keyof typeof USER_CHIPS] ?? {
+//     cls: '',
+//     icon: '🙂',
+//     label: username || 'guest',
+//   };
+
+//   const roleChip = useMemo(
+//     () => (resolved ? ROLE_BADGE[resolved.role] : ROLE_BADGE.USER),
+//     [resolved],
+//   );
+
+//   return (
+//     <div className="flex items-center gap-2">
+//       {/* Pastille "DEV" */}
+//       <span className="px-2 py-1 rounded-full text-[10px] font-semibold bg-yellow-100 text-yellow-800">
+//         DEV
+//       </span>
+
+//       {/* Chip utilisateur (visuel constant, dépend du username choisi) */}
+//       <span
+//         className={`hidden sm:inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${userChip.cls}`}
+//         title={`username: ${userChip.label}`}
+//       >
+//         <span>{userChip.icon}</span>
+//         <span className="font-medium">{userChip.label}</span>
+//       </span>
+
+//       {/* Selecteur username */}
+//       <select
+//         className="text-sm border rounded px-2 py-1 bg-white"
+//         value={username}
+//         onChange={(e) => setUsername(e.target.value as DevName)}
+//         aria-label="Sélection utilisateur de dev"
+//       >
+//         {DEV_USERNAMES.map((u) => (
+//           <option key={u} value={u}>
+//             {u}
+//           </option>
+//         ))}
+//       </select>
+
+//       {/* Pastille rôle (résolu DB) */}
+//       {resolved && (
+//         <span
+//           className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${roleChip.cls}`}
+//           title={`role: ${resolved.role}`}
+//         >
+//           <span>{roleChip.icon}</span>
+//           <span className="font-medium">{resolved.role}</span>
+//         </span>
+//       )}
+
+//       {/* ID court + état */}
+//       <span className="hidden md:inline text-xs text-gray-500" title={resolved?.id || undefined}>
+//         {loading ? '…' : shorten(resolved?.id)}
+//       </span>
+
+//       {/* Bouton reset (vide le localStorage dev + reload) */}
+//       <button
+//         className="ml-1 text-xs text-gray-500 hover:text-gray-800 underline underline-offset-2"
+//         onClick={() => {
+//           localStorage.removeItem('dev.userId');
+//           localStorage.removeItem('dev.username');
+//           localStorage.removeItem('dev.role');
+//           location.reload();
+//         }}
+//         title="Réinitialiser le state dev"
+//       >
+//         reset
+//       </button>
+
+//       {/* Erreur (si username non trouvé) */}
+//       {err && (
+//         <span className="text-xs text-red-600" title={err}>
+//           ⚠︎
+//         </span>
+//       )}
+//     </div>
+//   );
+// }
+
 'use client';
+import { useEffect, useMemo, useState } from 'react';
 
-import React, { useEffect, useMemo, useState } from 'react';
-import { fetch as signedFetch } from '@/utils/api-client';
-
-type UserRole = 'USER' | 'PREMIUM' | 'MODERATOR' | 'ADMIN';
-
-// --- Les profils visibles dans le switcher (aucun ID ici) ---
-const DEV_USERNAMES = ['alice', 'bob', 'charlie', 'dave', 'admin'] as const;
-type DevName = (typeof DEV_USERNAMES)[number];
-
-// Pastille "utilisateur" (cosmétique, propre à chaque nom)
-const USER_CHIPS: Record<DevName, { icon: string; cls: string; label: string }> = {
-  alice: { icon: '🧪', cls: 'bg-sky-100 text-sky-800', label: 'alice' },
-  bob: { icon: '🧑‍💻', cls: 'bg-indigo-100 text-indigo-800', label: 'bob' },
-  charlie: { icon: '🧑‍🏫', cls: 'bg-emerald-100 text-emerald-800', label: 'charlie' },
-  dave: { icon: '🧑‍🚀', cls: 'bg-amber-100 text-amber-800', label: 'dave' },
-  admin: { icon: '🛠️', cls: 'bg-rose-100 text-rose-800', label: 'admin' },
-};
-
-// Pastille "rôle" (icône + couleurs par rôle)
-const ROLE_BADGE: Record<UserRole, { icon: string; cls: string }> = {
-  ADMIN: { icon: '👑', cls: 'bg-red-100 text-red-800' },
-  MODERATOR: { icon: '👮', cls: 'bg-green-100 text-green-800' },
-  PREMIUM: { icon: '💎', cls: 'bg-purple-100 text-purple-800' },
-  USER: { icon: '👤', cls: 'bg-gray-100 text-gray-800' },
-};
-
-type ResolvedUser = { id: string; username: string; role: UserRole };
-
-// Helper visuel
-const shorten = (id?: string, n = 6) => (id ? `${id.slice(0, n)}…${id.slice(-n)}` : '—');
+type DevUser = { id: string; username: string; email?: string; role?: string };
 
 export default function DevHeaderSwitcher() {
-  // username choisi (persisté)
-  const [username, setUsername] = useState<DevName>('alice');
-  // user résolu depuis la DB
-  const [resolved, setResolved] = useState<ResolvedUser | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
+  // cache courte durée en mémoire
+  const [users, setUsers] = useState<DevUser[]>([]);
+  const [username, setUsername] = useState<string>(''); // valeur contrôlée
+  const show =
+    process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLIC_SHOW_DEV_SWITCHER === 'true';
 
-  // Charger les valeurs persistées au boot
   useEffect(() => {
-    const u = (localStorage.getItem('dev.username') as DevName) || 'alice';
-    setUsername(DEV_USERNAMES.includes(u) ? u : 'alice');
-  }, []);
-
-  // Résolution de l’ID/role depuis la DB à chaque changement de username
-  useEffect(() => {
-    let cancelled = false;
-    async function run() {
-      setLoading(true);
-      setErr(null);
+    if (!show) return;
+    (async () => {
       try {
-        const resp = await signedFetch(
-          `/api/dev/resolve-user?username=${encodeURIComponent(username)}`,
-        );
-        if (!resp.ok) {
-          const t = await resp.text().catch(() => '');
-          throw new Error(`resolve-user ${resp.status} ${t}`);
-        }
-        const data = (await resp.json()) as ResolvedUser;
-        if (cancelled) return;
+        const res = await fetch('/api/dev/users', { cache: 'no-store' });
+        if (!res.ok) return;
+        const data = (await res.json()) as { users: DevUser[] };
+        setUsers(data.users || []);
 
-        setResolved(data);
-        // Expose pour useDevAuth / hooks
-        localStorage.setItem('dev.username', data.username);
-        localStorage.setItem('dev.userId', data.id);
-        localStorage.setItem('dev.role', data.role);
-        document.cookie = `x-dev-username=${encodeURIComponent(
-          data.username,
-        )}; Path=/; SameSite=Lax`;
-        // (optionnel) si tu veux aussi un id
-        if (data.id) {
-          document.cookie = `x-dev-user-id=${encodeURIComponent(data.id)}; Path=/; SameSite=Lax`;
-        }
-        // window.location.reload();
-      } catch (e: any) {
-        if (!cancelled) {
-          setResolved(null);
-          setErr(e?.message ?? 'resolve failed');
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-    run();
-    return () => {
-      cancelled = true;
-    };
-  }, [username]);
+        // init du username
+        const fromCookie = getCookie('x-dev-username'); // implémente un petit util si besoin
+        const fromLocal = localStorage.getItem('dev-username') || '';
+        const pick = fromCookie || fromLocal || (data.users?.[0]?.username ?? 'guest');
+        setUsername(pick);
+      } catch {}
+    })();
+  }, [show]);
 
-  // const userChip = useMemo(() => USER_CHIPS[username], [username]);
-  const userChip = USER_CHIPS[username as keyof typeof USER_CHIPS] ?? {
-    cls: '',
-    icon: '🙂',
-    label: username || 'guest',
+  const onChange = async (next: string) => {
+    setUsername(next);
+    localStorage.setItem('dev-username', next);
+
+    // appelle ton endpoint existant pour poser le cookie
+    const r = await fetch(`/api/dev/resolve-user?username=${encodeURIComponent(next)}`, {
+      method: 'POST',
+    });
+    // si 404 (flag off) ou 400 (user inconnu), tu peux afficher un toast et revenir à l’ancien
   };
 
-  const roleChip = useMemo(
-    () => (resolved ? ROLE_BADGE[resolved.role] : ROLE_BADGE.USER),
-    [resolved],
-  );
+  if (!show) return null;
+
+  // fallback pour éviter les crashs d’affichage
+  const safeLabel = (u?: DevUser) => u?.username ?? 'guest';
 
   return (
-    <div className="flex items-center gap-2">
-      {/* Pastille "DEV" */}
-      <span className="px-2 py-1 rounded-full text-[10px] font-semibold bg-yellow-100 text-yellow-800">
-        DEV
-      </span>
-
-      {/* Chip utilisateur (visuel constant, dépend du username choisi) */}
-      <span
-        className={`hidden sm:inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${userChip.cls}`}
-        title={`username: ${userChip.label}`}
-      >
-        <span>{userChip.icon}</span>
-        <span className="font-medium">{userChip.label}</span>
-      </span>
-
-      {/* Selecteur username */}
+    <div className="hidden sm:flex items-center gap-2">
       <select
-        className="text-sm border rounded px-2 py-1 bg-white"
+        className="border rounded px-2 py-1"
         value={username}
-        onChange={(e) => setUsername(e.target.value as DevName)}
-        aria-label="Sélection utilisateur de dev"
+        onChange={(e) => onChange(e.target.value)}
       >
-        {DEV_USERNAMES.map((u) => (
-          <option key={u} value={u}>
-            {u}
+        {users.length === 0 && <option value="guest">guest</option>}
+        {users.map((u) => (
+          <option key={u.id} value={u.username}>
+            {safeLabel(u)} {u.role ? `(${u.role})` : ''}
           </option>
         ))}
       </select>
-
-      {/* Pastille rôle (résolu DB) */}
-      {resolved && (
-        <span
-          className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${roleChip.cls}`}
-          title={`role: ${resolved.role}`}
-        >
-          <span>{roleChip.icon}</span>
-          <span className="font-medium">{resolved.role}</span>
-        </span>
-      )}
-
-      {/* ID court + état */}
-      <span className="hidden md:inline text-xs text-gray-500" title={resolved?.id || undefined}>
-        {loading ? '…' : shorten(resolved?.id)}
-      </span>
-
-      {/* Bouton reset (vide le localStorage dev + reload) */}
-      <button
-        className="ml-1 text-xs text-gray-500 hover:text-gray-800 underline underline-offset-2"
-        onClick={() => {
-          localStorage.removeItem('dev.userId');
-          localStorage.removeItem('dev.username');
-          localStorage.removeItem('dev.role');
-          location.reload();
-        }}
-        title="Réinitialiser le state dev"
-      >
-        reset
-      </button>
-
-      {/* Erreur (si username non trouvé) */}
-      {err && (
-        <span className="text-xs text-red-600" title={err}>
-          ⚠︎
-        </span>
-      )}
+      <span className="text-xs opacity-70">dev auth (DB)</span>
     </div>
   );
+}
+
+// petit helper basique (à mettre où tu veux)
+function getCookie(name: string) {
+  if (typeof document === 'undefined') return '';
+  const m = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+  return m ? decodeURIComponent(m[2]) : '';
 }
