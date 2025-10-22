@@ -10,8 +10,8 @@ import DevAutoLogin from './components/dev/DevAutoLogin';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata = {
-  title: 'Conlang Manager',
-  description: 'Personnal language manager',
+  title: 'Mad Slang App',
+  description: 'Personnal slang manager',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
