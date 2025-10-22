@@ -15,20 +15,15 @@
 // lib/prisma.ts
 import { PrismaClient } from '@prisma/client';
 
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined;
-  prismaReady: Promise<void> | undefined;
+const g = globalThis as unknown as {
+  prisma?: PrismaClient;
+  prismaReady?: Promise<void>;
 };
 
-export const prisma =
-  globalForPrisma.prisma ??
-  new PrismaClient({
-    // log: ['error', 'warn'], // utile en debug
-  });
-
-export const prismaReady = globalForPrisma.prismaReady ?? prisma.$connect();
+export const prisma = g.prisma ?? new PrismaClient();
+export const prismaReady = g.prismaReady ?? prisma.$connect();
 
 if (process.env.NODE_ENV !== 'production') {
-  globalForPrisma.prisma = prisma;
-  globalForPrisma.prismaReady = prismaReady;
+  g.prisma = prisma;
+  g.prismaReady = prismaReady;
 }

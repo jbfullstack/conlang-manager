@@ -188,6 +188,6 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
       { status: 500 },
     );
   } finally {
-    await prisma.$disconnect();
+    // await prisma.$disconnect();
   }
 }

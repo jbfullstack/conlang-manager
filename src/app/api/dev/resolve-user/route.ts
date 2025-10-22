@@ -30,3 +30,22 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'internal_error' }, { status: 500 });
   }
 }
+
+// temp solution for vquick vercel deploy -> user resolver discard
+export async function POST(req: Request) {
+  const { username } = await req.json(); // ou query param si tu préfères
+
+  // … vérif DB: user existe, etc.
+
+  const res = NextResponse.json({ ok: true, user: { username } });
+  res.cookies.set('x-dev-username', username, {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'lax',
+    path: '/',
+    // maxAge: 60 * 60 * 24 * 30, // 30 jours
+    // utile si tu alternes sous-domaines : définis COOKIE_DOMAIN=madslang.vercel.app
+    domain: process.env.COOKIE_DOMAIN || undefined,
+  });
+  return res;
+}

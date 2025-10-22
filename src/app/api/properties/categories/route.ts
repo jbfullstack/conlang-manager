@@ -10,16 +10,16 @@ export async function GET(request: NextRequest) {
       distinct: ['category'],
       where: {
         category: {
-          not: null
-        }
+          not: null,
+        },
       },
       orderBy: {
-        category: 'asc'
-      }
+        category: 'asc',
+      },
     });
 
     const uniqueCategories = categories
-      .map(p => p.category)
+      .map((p) => p.category)
       .filter(Boolean) // Enlever les valeurs null/undefined
       .sort();
 
@@ -27,24 +27,23 @@ export async function GET(request: NextRequest) {
     const categoriesWithCount = await Promise.all(
       uniqueCategories.map(async (category) => {
         const count = await prisma.property.count({
-          where: { category }
+          where: { category },
         });
         return { category, count };
-      })
+      }),
     );
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       categories: uniqueCategories,
-      categoriesWithCount
+      categoriesWithCount,
     });
-    
   } catch (error) {
     console.error('Erreur GET categories:', error);
     return NextResponse.json(
       { error: 'Erreur serveur lors de la récupération des catégories' },
-      { status: 500 }
+      { status: 500 },
     );
   } finally {
-    await prisma.$disconnect();
+    // await prisma.$disconnect();
   }
 }

@@ -5,6 +5,7 @@ import { SessionProvider } from '@/app/components/providers/SessionProvider';
 import { SpaceProvider } from '@/app/components/providers/SpaceProvider';
 import ResponsiveNav from '@/app/components/ui/ResponsiveNav';
 import { DevBanner } from '@/dev/dev-banner';
+import DevAutoLogin from './components/dev/DevAutoLogin';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -14,6 +15,9 @@ export const metadata = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  {
+    process.env.NEXT_PUBLIC_USE_DEV_AUTH_IN_PROD === 'true' && <DevAutoLogin />;
+  }
   return (
     <html lang="fr">
       <body className={inter.className}>

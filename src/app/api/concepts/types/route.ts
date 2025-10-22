@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
-
 // GET - Récupérer tous les types de concepts disponibles
 export async function GET(request: NextRequest) {
   try {
@@ -10,12 +9,12 @@ export async function GET(request: NextRequest) {
       select: { type: true },
       distinct: ['type'],
       orderBy: {
-        type: 'asc'
-      }
+        type: 'asc',
+      },
     });
 
     const uniqueTypes = types
-      .map(c => c.type)
+      .map((c) => c.type)
       .filter(Boolean) // Enlever les valeurs falsy
       .sort();
 
@@ -23,27 +22,26 @@ export async function GET(request: NextRequest) {
     const typesWithCount = await Promise.all(
       uniqueTypes.map(async (type) => {
         const count = await prisma.concept.count({
-          where: { type }
+          where: { type },
         });
         const activeCount = await prisma.concept.count({
-          where: { type, isActive: true }
+          where: { type, isActive: true },
         });
         return { type, count, activeCount };
-      })
+      }),
     );
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       types: uniqueTypes,
-      typesWithCount
+      typesWithCount,
     });
-    
   } catch (error) {
     console.error('Erreur GET concept types:', error);
     return NextResponse.json(
       { error: 'Erreur serveur lors de la récupération des types de concepts' },
-      { status: 500 }
+      { status: 500 },
     );
   } finally {
-    await prisma.$disconnect();
+    // await prisma.$disconnect();
   }
 }
