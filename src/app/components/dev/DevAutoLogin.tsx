@@ -4,15 +4,13 @@ import { useEffect } from 'react';
 
 export default function DevAutoLogin() {
   useEffect(() => {
-    // 1) déjà loggé ? => rien à faire
     const hasCookie =
       typeof document !== 'undefined' && document.cookie.includes('x-dev-username=');
     if (hasCookie) return;
 
-    // 2) éviter une boucle si jamais POST échoue
+    // évite boucle en cas d’échec
     if (localStorage.getItem('dev-autologin-done') === '1') return;
 
-    // 3) username par défaut (ou un que tu stockes en local)
     const username =
       (typeof localStorage !== 'undefined' && (localStorage.getItem('dev-username') || 'alice')) ||
       'alice';
@@ -28,9 +26,7 @@ export default function DevAutoLogin() {
         });
         localStorage.setItem('dev-autologin-done', '1');
         location.replace(location.pathname + location.search);
-      } catch {
-        // no-op
-      }
+      } catch {}
     })();
   }, []);
 

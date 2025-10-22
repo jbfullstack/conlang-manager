@@ -1,14 +1,14 @@
 import { useSession } from 'next-auth/react';
 import { useCallback, useEffect, useState } from 'react';
-import { 
-  hasPermission, 
-  hasAnyPermission, 
-  hasAllPermissions, 
+import {
+  hasPermission,
+  hasAnyPermission,
+  hasAllPermissions,
   canModifyResource,
   PERMISSIONS,
   FEATURE_FLAGS,
   Role,
-  Permission
+  Permission,
 } from '@/lib/permissions';
 
 import { useDailyUsage } from './useDailyUsage';
@@ -18,10 +18,10 @@ const LIMITS_BY_ROLE: Record<string, number> = {
   USER: 5,
   PREMIUM: 50,
   MODERATOR: 50,
-  ADMIN: -1,  // -1 = illimité
+  ADMIN: -1, // -1 = illimité
 };
 
-type UserRole = 'USER' | 'PREMIUM' | 'MODERATOR' | 'ADMIN';
+export type UserRole = 'USER' | 'PREMIUM' | 'MODERATOR' | 'ADMIN';
 
 export function useDevAuth() {
   const [state, setState] = useState({
@@ -49,13 +49,13 @@ export function useDevAuth() {
 // Hook principal useAuth - Version simplifiée
 // export function useAuth() {
 //   const isDevelopment = process.env.NODE_ENV === 'development';
-  
+
 //   // En développement, utiliser le système de dev
 //   const devAuth = isDevelopment ? useDevAuth() : { user: null, role: null, isAuthenticated: false, isLoading: false };
-  
+
 //   // En production, utiliser NextAuth (maintenant protégé par SessionProvider)
 //   const { data: session, status } = useSession();
-  
+
 //   // Déterminer les valeurs finales
 //   const user = isDevelopment ? devAuth.user : session?.user as UnifiedUser;
 //   const role = isDevelopment ? devAuth.role : (session?.user?.role as Role);
@@ -88,7 +88,7 @@ export function useDevAuth() {
 // Hook pour les permissions (utilise useAuth)
 export function usePermissions() {
   const { user, role, isAuthenticated, hasPermission: authHasPermission } = useAuth();
-  
+
   const can = (permission: Permission): boolean => {
     return authHasPermission(permission);
   };
@@ -106,7 +106,7 @@ export function usePermissions() {
   const canModify = (
     resourceOwnerId: string,
     editOwnPermission: Permission,
-    editAllPermission: Permission
+    editAllPermission: Permission,
   ): boolean => {
     if (!isAuthenticated || !role || !user?.id) return false;
     return canModifyResource(role, user.id, resourceOwnerId, editOwnPermission, editAllPermission);
@@ -132,11 +132,11 @@ export function useCompositionPermissions() {
     maxCompositionsPerDay === -1
       ? -1
       : compositionsCreated != null
-      ? Math.max(0, maxCompositionsPerDay - compositionsCreated)
-      : undefined;
+        ? Math.max(0, maxCompositionsPerDay - compositionsCreated)
+        : undefined;
 
   const canCreate =
-    (maxCompositionsPerDay === -1) ||
+    maxCompositionsPerDay === -1 ||
     (compositionsCreated != null && compositionsCreated < maxCompositionsPerDay);
 
   const canUseAISearch = role === 'PREMIUM' || role === 'MODERATOR' || role === 'ADMIN';
