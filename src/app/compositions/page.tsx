@@ -334,7 +334,7 @@ export default function CompositionPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50">
       {/* DEBUG */}
-      <div className="bg-yellow-100 border border-yellow-300 p-4 m-4 rounded text-sm">
+      {/* <div className="bg-yellow-100 border border-yellow-300 p-4 m-4 rounded text-sm">
         <strong>🧪 DEBUG INFO:</strong>
         <br />
         User: {user?.name} ({user?.id})<br />
@@ -347,7 +347,7 @@ export default function CompositionPage() {
         Max per day: {limits?.maxCompositionsPerDay ?? '-'}
         <br />
         SWR key: {swrKey || '-'}
-      </div>
+      </div> */}
 
       <div className="max-w-7xl mx-auto p-3 sm:p-6 space-y-4 sm:space-y-6">
         {/* ====== HEADER ====== */}

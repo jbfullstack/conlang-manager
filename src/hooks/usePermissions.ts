@@ -15,9 +15,9 @@ import { useDailyUsage } from './useDailyUsage';
 import { useAuth } from './useDevAuth';
 
 const LIMITS_BY_ROLE: Record<string, number> = {
-  USER: 5,
-  PREMIUM: 50,
-  MODERATOR: 50,
+  USER: -1,
+  PREMIUM: -1,
+  MODERATOR: -1,
   ADMIN: -1, // -1 = illimité
 };
 
