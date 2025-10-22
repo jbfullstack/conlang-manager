@@ -21,41 +21,69 @@ export async function POST(request: NextRequest) {
 
     // Prompt optimisé: liste des primitives avec leurs propriétés utilisées (limitées)
     const prompt = `
-        Tu es un linguiste expert en langue construite basée sur des concepts primitifs.
+Tu es à la fois :
+1) Linguiste expert en langue construite à primitives
+2) Créateur de lexique poétique et culturel
 
-        CONCEPT FRANÇAIS À EXPÉDUIR: "${frenchInput}"
+But : À partir d'un **concept français** donné, proposer la **meilleure composition** (ordre significatif, répétitions autorisées) **uniquement avec les primitives disponibles**, pour exprimer le concept sous la forme d’un **phénomène culturel/naturel** ou d’une **image métaphorique canonique**. Éviter les juxtapositions plates (ex. "lumière rapide").
 
-        PRIMITIFS DISPONIBLES (liste succincte, ne pas réécrire tout le détail) :
-        ${concepts
-          .map((c) => {
-            const props = (c.conceptProperties ?? [])
-              .map((cp: any) => cp.property?.name)
-              .filter(Boolean)
-              .join(', ');
-            return `- "${c.mot}" = ${c.definition} (type: ${c.type}${
-              props ? `, propriétés: ${props}` : ''
-            })`;
-          })
-          .join('\n')}
+CONCEPT FRANÇAIS À EXPRIMER :
+"${frenchInput}"
 
-        Tâche: proposer la meilleure composition (1 sens principal) qui exprime le concept français donné, en utilisant les primitives disponibles.
+PRIMITIFS DISPONIBLES (ne pas réécrire les détails, n'utiliser que ceux listés) :
+${concepts
+  .map((c) => {
+    const props = (c.conceptProperties ?? [])
+      .map((cp) => cp?.property?.name)
+      .filter(Boolean)
+      .join(', ');
+    return `- ${c.mot} = ${c.definition} (type: ${c.type}${props ? `, propriétés: ${props}` : ''})`;
+  })
+  .join('\n')}
 
-        FORMAT DE RÉPONSE (JSON STRICT, UNIQUEMENT):
-        {
-          "sens": "sens principal",
-          "confidence": 0.0,
-          "justification": "raisonnement logique",
-          "examples": ["exemple d'usage 1"],
-          "alternatives": [
-            {"sens": "sens alternatif 1", "confidence": 0.0},
-            {"sens": "sens alternatif 2", "confidence": 0.0}
-          ],
-          "missing_concepts": ["nom_prochain_concept_si_manquant"],
-          "pattern": ["concept_id_1","concept_id_2",...],
-          "source": "llm"
-        }
-        RÉPONSE EN JSON UNIQUEMENT
-        `;
+### MÉTHODE OBLIGATOIRE
+1. **Identifier la cible sémantique** du concept (phénomène naturel/culturel, archétype, image métaphorique concrète).
+2. **Chercher une composition courte (2–4 items)** qui recrée ce phénomène/image. 
+   - L’ordre est sémantique (cause→effet, support→qualité, source→trajectoire→cible).
+   - Les répétitions sont autorisées si elles renforcent le sens (ex. intensité, rythme).
+3. **Sélectionner la meilleure composition** selon cette métrique (dans cet ordre) :
+   - (a) **Pertinence phénoménologique** : colle-t-elle à un phénomène universel connu ?
+   - (b) **Couverture sémantique** : toutes les dimensions essentielles sont présentes (source, obstacle, résultat, etc.) ?
+   - (c) **Parcimonie** : pas d’items superflus ; 2–3 items préférés si suffisant.
+   - (d) **Canonicité culturelle** : image/événement reconnu (éclipse, reflet, aurore, foudre, mirage…).
+4. **Vérifications avant réponse** :
+   - Toutes les primitives de \`pattern\` **existent** dans la liste.
+   - Aucune primitive inventée.
+   - Si une primitive manque (ex. "lune", "ombre portée", "alignement"), l'ajouter dans \`missing_concepts\`.
+   - Si aucune image/phénomène satisfaisant n’émerge, proposer **en repli** une composition descriptive minimale.
+5. **Interdictions** :
+   - Éviter les sorties de type "nom + adjectif" si un phénomène/image canonique existe.
+   - Pas de texte hors JSON.
+
+### EXEMPLES DE CARTOGRAPHIE (indicatifs)
+- lumière + mouvement rapide → “étoile filante” (ordre source→trajectoire)
+- soleil + obscurité → “éclipse” (obscurcissement du soleil)
+- vent + sable → “tempête/sirocco”
+- feu + ciel → “aurore” ou “éruption”
+- eau + lumière → “reflet/miroir liquide” (support→effet)
+
+### FORMAT DE RÉPONSE (JSON STRICT, UNIQUEMENT)
+{
+  "sens": "concept dominant (phénomène/image)",
+  "confidence": 0.0,
+  "justification": "raisonnement logique et poétique, concis (2–4 phrases)",
+  "examples": ["exemple d'usage 1"],
+  "alternatives": [
+    {"sens": "sens alternatif 1", "confidence": 0.0},
+    {"sens": "sens alternatif 2", "confidence": 0.0}
+  ],
+  "missing_concepts": ["nom_prochain_concept_si_manquant"],
+  "pattern": ["primitive_1","primitive_2","primitive_3"],
+  "source": "llm"
+}
+
+⚠️ RÉPONSE EN JSON STRICT UNIQUEMENT — AUCUN TEXTE EN DEHORS DU JSON
+`;
 
     const response = await openai.chat.completions.create(buildLLMPromptRequest(prompt));
     const raw = response.choices?.[0]?.message?.content ?? '{}';
