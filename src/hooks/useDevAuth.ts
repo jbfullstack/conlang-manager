@@ -142,6 +142,7 @@
 //   };
 // }
 
+// src/hooks/useDevAuth.ts
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -160,12 +161,15 @@ type DevAuthState = {
   role: UserRole | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-
-  // rétro-compat si d’autres endroits utilisent encore ces champs
   currentUserId?: string;
   currentUser?: DevUser | null;
   fallbackUsed?: boolean;
 };
+
+function hasDevCookie(): boolean {
+  if (typeof document === 'undefined') return false;
+  return document.cookie.includes('x-dev-username=');
+}
 
 /** Hook DEV : lit le state posé par DevAutoLogin / resolve-user via localStorage */
 export function useDevAuth(): DevAuthState {
@@ -184,19 +188,23 @@ export function useDevAuth(): DevAuthState {
       const role = (localStorage.getItem('dev.role') as UserRole | null) || null;
       const email = localStorage.getItem('dev.email') || undefined;
 
-      if (id && username && role) {
-        const user: DevUser = { id, name: username, role, email };
+      // ✅ si le cookie dev est là, on considère "authentifié" même si le LS est vide
+      const cookieOK = hasDevCookie();
+
+      if ((id && username && role) || cookieOK) {
+        const user: DevUser | null =
+          id && username && role ? { id, name: username, role, email } : null;
         setState({
           user,
-          role,
+          role: user?.role ?? null,
           isAuthenticated: true,
           isLoading: false,
-          currentUserId: id,
+          currentUserId: user?.id,
           currentUser: user,
           fallbackUsed: true,
         });
       } else {
-        setState((prev) => ({ ...prev, isLoading: false }));
+        setState((prev) => ({ ...prev, isLoading: false, isAuthenticated: false }));
       }
     } catch {
       setState((prev) => ({ ...prev, isLoading: false }));
@@ -206,28 +214,18 @@ export function useDevAuth(): DevAuthState {
   return state;
 }
 
-/** Détecte si le cookie x-dev-username (posé par /api/dev/resolve-user) existe */
-function hasDevCookie(): boolean {
-  if (typeof document === 'undefined') return false;
-  return document.cookie.includes('x-dev-username=');
-}
-
 /**
  * Hook unifié :
- * - DEV : (cookie présent OU build dev) → utilise useDevAuth (localStorage)
- * - PROD : utilise NextAuth (session)
- * Conserve les helpers: hasRole, hasPermission, isDev
+ * - DEV : (build dev OU cookie présent) → useDevAuth (et considère authentifié si cookie)
+ * - PROD : NextAuth
+ * Conserve helpers et shape d'origine.
  */
 export function useAuth() {
   const isDevelopment = process.env.NODE_ENV === 'development' || hasDevCookie();
 
-  // Branche DEV (localStorage + cookie)
   const devAuth = useDevAuth();
-
-  // Branche PROD (NextAuth)
   const { data: session, status } = useSession();
 
-  // Normalisation des sorties
   const user: (DevUser & Record<string, any>) | null = isDevelopment
     ? (devAuth.user as DevUser | null)
     : ((session?.user as any) ?? null);
@@ -236,11 +234,13 @@ export function useAuth() {
     ? ((devAuth.role as Role | null) ?? null)
     : ((session?.user?.role as Role | undefined) ?? null);
 
-  const isAuthenticated: boolean = isDevelopment ? devAuth.isAuthenticated : !!session;
+  // ✅ clé : en dev-mode, on est authentifié si cookie présent OU si devAuth l'est déjà
+  const isAuthenticated: boolean = isDevelopment
+    ? hasDevCookie() || devAuth.isAuthenticated
+    : !!session;
 
   const isLoading: boolean = isDevelopment ? devAuth.isLoading : status === 'loading';
 
-  // Helpers identiques à ta version
   const hasRole = (checkRole: Role): boolean => role === checkRole;
 
   const hasPermissionCheck = (permission: Permission): boolean => {
@@ -259,5 +259,4 @@ export function useAuth() {
   };
 }
 
-/* (optionnel) exports alias pour éviter de faux “not exported” selon l’ESM/TS config */
 export { useDevAuth as _useDevAuthExport, useAuth as _useAuthExport };

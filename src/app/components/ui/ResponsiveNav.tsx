@@ -13,7 +13,7 @@ export default function ResponsiveNav() {
 
   const navItems = useMemo(
     () => [
-      { href: '/dashboard', label: 'Dashboard', emoji: '📊' },
+      // { href: '/dashboard', label: 'Dashboard', emoji: '📊' },
       { href: '/dictionary', label: 'Dictionary', emoji: '📚' },
       { href: '/concepts', label: 'Concepts', emoji: '🧠' },
       { href: '/compositions', label: 'Compositions', emoji: '🧩' },

@@ -29,6 +29,11 @@ import {
 } from '@/utils/api-client';
 import { Concept } from '@/interfaces/concept.interface';
 
+function hasDevCookie(): boolean {
+  if (typeof document === 'undefined') return false;
+  return document.cookie.includes('x-dev-username=');
+}
+
 type CompositionResult = {
   sens: string;
   confidence: number;
@@ -329,7 +334,14 @@ export default function CompositionPage() {
   };
 
   if (isLoading) return <div>Chargement...</div>;
-  if (!isAuthenticated) return <div>Pas connecté</div>;
+  const isAuthDevAware = useMemo(() => isAuthenticated || hasDevCookie(), [isAuthenticated]);
+
+  if (isLoading) return <div>Chargement…</div>;
+
+  // ⬇️ remplace ton ancien guard par celui-ci
+  if (!isAuthDevAware) {
+    return <div>Pas connecté (dev)</div>;
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50">
