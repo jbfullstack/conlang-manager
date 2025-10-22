@@ -15,8 +15,8 @@ export default function ResponsiveNav() {
     () => [
       // { href: '/dashboard', label: 'Dashboard', emoji: '📊' },
       { href: '/dictionary', label: 'Dictionary', emoji: '📚' },
-      { href: '/concepts', label: 'Concepts', emoji: '🧠' },
       { href: '/compositions', label: 'Compositions', emoji: '🧩' },
+      { href: '/concepts', label: 'Concepts', emoji: '🧠' },
       { href: '/properties', label: 'Propriétés', emoji: '⚙️' },
     ],
     [],
@@ -32,8 +32,8 @@ export default function ResponsiveNav() {
           <div className="flex items-center min-w-0">
             <h1 className="text-base sm:text-lg lg:text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent truncate">
               <span className="mr-1 sm:mr-2">🌐</span>
-              <span className="hidden xs:inline">Conlang</span>
-              <span className="hidden sm:inline"> Manager</span>
+              {/* <span className="hidden xs:inline">Mad'Slang</span> */}
+              <span className="hidden sm:inline">Mad'Slang</span>
             </h1>
           </div>
 
