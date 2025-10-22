@@ -15,12 +15,10 @@ export const metadata = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  {
-    process.env.NEXT_PUBLIC_USE_DEV_AUTH_IN_PROD === 'true' && <DevAutoLogin />;
-  }
   return (
     <html lang="fr">
       <body className={inter.className}>
+        <DevAutoLogin />
         <SessionProvider>
           {/* NEW: on englobe l’app dans le provider d’espace */}
           <SpaceProvider>
