@@ -139,7 +139,8 @@ export function useCompositionPermissions() {
     maxCompositionsPerDay === -1 ||
     (compositionsCreated != null && compositionsCreated < maxCompositionsPerDay);
 
-  const canUseAISearch = role === 'PREMIUM' || role === 'MODERATOR' || role === 'ADMIN';
+  // const canUseAISearch = role === 'PREMIUM' || role === 'MODERATOR' || role === 'ADMIN';
+  const canUseAISearch = true;
   const canUseAIAnalyze = canUseAISearch;
 
   return {
